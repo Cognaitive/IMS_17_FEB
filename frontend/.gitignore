@@ -4,4 +4,5 @@ dist/
 *.log
 .env.local
 .env.production.local
+.env.development.local
 

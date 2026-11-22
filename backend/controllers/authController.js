@@ -1,6 +1,23 @@
 const User = require("../models/User");
 const Otp = require("../models/Otp");
 const nodemailer = require("nodemailer");
+const { escapeHtml } = require("../utils/escapeHtml");
+
+const MAX_OTP_ATTEMPTS = 5;
+
+// Checks a submitted code against the stored one for this email/mobile and uses it up.
+// The submitted code never goes into the query, and every guess counts atomically,
+// so after MAX_OTP_ATTEMPTS the code stops working even under parallel requests.
+const consumeOtp = async (query, otp) => {
+  const record = await Otp.findOneAndUpdate(query, { $inc: { attempts: 1 } }, { new: true });
+  if (!record) return false;
+  if (record.attempts > MAX_OTP_ATTEMPTS || record.otp !== String(otp).trim()) {
+    if (record.attempts >= MAX_OTP_ATTEMPTS) await Otp.deleteOne({ _id: record._id });
+    return false;
+  }
+  await Otp.deleteOne({ _id: record._id });
+  return true;
+};
 
 // @desc    Register new user
 // @route   POST /api/auth/register
@@ -199,7 +216,7 @@ const sendOtp = async (req, res) => {
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
           <h2 style="color: #0a1638; text-align: center;">Samay Watch</h2>
-          <p>Hello ${name || 'User'},</p>
+          <p>Hello ${escapeHtml(name) || 'User'},</p>
           <p>Thank you for registering. Your One-Time Password (OTP) is:</p>
           <h1 style="font-size: 32px; letter-spacing: 5px; color: #d4af37; text-align: center; background: #f9f9f9; padding: 15px; border-radius: 5px;">${otpValue}</h1>
           <p>This OTP is valid for 5 minutes. Please do not share this with anyone.</p>
@@ -337,7 +354,7 @@ const forgotPassword = async (req, res) => {
             </div>
             
             <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000;">Password Reset Code</h2>
-            <p>Hello <strong>${user.name}</strong>,</p>
+            <p>Hello <strong>${escapeHtml(user.name)}</strong>,</p>
             <p>We received a request to reset the password for your Samay Watch account. Use the following verification code to proceed:</p>
             
             <h1 style="font-size: 36px; letter-spacing: 6px; color: #b91c1c; text-align: center; background: #f9f9f9; padding: 15px; border-radius: 10px; font-family: monospace; border: 1px dashed #ddd; margin: 20px 0;">${otpValue}</h1>
@@ -385,8 +402,7 @@ const resetPassword = async (req, res) => {
     const formattedEmail = email.toLowerCase().trim();
     
     // Verify OTP first
-    const otpRecord = await Otp.findOne({ email: formattedEmail, otp });
-    if (!otpRecord) {
+    if (!(await consumeOtp({ email: formattedEmail }, otp))) {
       return res.status(400).json({ success: false, message: "Invalid or expired verification code" });
     }
 
@@ -399,9 +415,6 @@ const resetPassword = async (req, res) => {
     // Update password (pre-save hook hashes it automatically)
     user.password = password;
     await user.save();
-
-    // Delete verified OTP record
-    await Otp.deleteOne({ _id: otpRecord._id });
 
     res.status(200).json({ success: true, message: "Password updated successfully" });
 
@@ -467,13 +480,9 @@ const verifyPhoneOtp = async (req, res) => {
     const cleanMobile = mobile.replace(/\D/g, '');
 
     // Verify OTP record
-    const otpRecord = await Otp.findOne({ mobile: cleanMobile, otp });
-    if (!otpRecord) {
+    if (!(await consumeOtp({ mobile: cleanMobile }, otp))) {
       return res.status(400).json({ message: "Invalid or expired verification code" });
     }
-
-    // OTP verified, delete it
-    await Otp.deleteOne({ _id: otpRecord._id });
 
     // Check if user already exists
     const user = await User.findOne({ mobile: cleanMobile });
@@ -595,7 +604,7 @@ const completePhoneRegistration = async (req, res) => {
               </div>
               
               <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000;">Account Activated Successfully</h2>
-              <p>Hello <strong>${user.name}</strong>,</p>
+              <p>Hello <strong>${escapeHtml(user.name)}</strong>,</p>
               <p>Welcome to Samay Watch. Your customer account has been successfully created and verified using your mobile number <strong>+91 ${user.mobile}</strong>.</p>
               
               <p>Next time you shop with us, simply log in using your mobile number for a faster, frictionless checkout experience.</p>
@@ -745,13 +754,9 @@ const verifyEmailOtp = async (req, res) => {
     const cleanEmail = email.toLowerCase().trim();
 
     // Verify OTP record
-    const otpRecord = await Otp.findOne({ email: cleanEmail, otp });
-    if (!otpRecord) {
+    if (!(await consumeOtp({ email: cleanEmail }, otp))) {
       return res.status(400).json({ message: "Invalid or expired verification code" });
     }
-
-    // OTP verified, delete it
-    await Otp.deleteOne({ _id: otpRecord._id });
 
     // Check if user already exists
     const user = await User.findOne({ email: cleanEmail });
@@ -873,8 +878,8 @@ const completeEmailRegistration = async (req, res) => {
               </div>
               
               <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000;">Account Activated Successfully</h2>
-              <p>Hello <strong>${user.name}</strong>,</p>
-              <p>Welcome to Samay Watch. Your customer account has been successfully created and verified using your email address <strong>${user.email}</strong>.</p>
+              <p>Hello <strong>${escapeHtml(user.name)}</strong>,</p>
+              <p>Welcome to Samay Watch. Your customer account has been successfully created and verified using your email address <strong>${escapeHtml(user.email)}</strong>.</p>
               
               <p>Next time you shop with us, simply log in using your registered email address for a faster, frictionless checkout experience.</p>
               

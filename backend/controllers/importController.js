@@ -6,6 +6,7 @@ const { recomputeDashboardStats } = require("../utils/recomputeDashboardStats");
 const { migrateUrlsToDoSpaces } = require("../utils/doSpacesImageMigrator");
 const { hasMinimalStorefrontData } = require("../utils/storeEligibility");
 const { generateProductSlug } = require("../utils/slugify");
+const { staffWriteError } = require("../utils/staffPermissions");
 const { clearBrandsCache } = require("./productController");
 
 // Zero-dependency CSV parser that safely respects quotes, escaped quotes, embedded commas and newlines
@@ -409,6 +410,8 @@ const importCSV = async (req, res) => {
       if (!existing && !data.brand) {
         problems.push("Brand is required to create a new product");
       }
+      const denied = staffWriteError(req.user, existing || null, data);
+      if (denied) problems.push(denied);
       if (problems.length > 0) {
         addError(rowLabel, group.sku, problems.join("; "));
         continue;

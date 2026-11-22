@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const { escapeHtml, escapeFields } = require("./escapeHtml");
 
 // Create SMTP Transporter helper
 function getTransporter() {
@@ -41,6 +42,7 @@ exports.sendTransitUpdate = async (order) => {
     if (!customerEmail) return;
 
     const orderNo = order.orderNumber || `#ORD-${order._id.toString().slice(-6).toUpperCase()}`;
+    const addr = escapeFields(order.shippingAddress);
     let subject = "";
     let statusTitle = "";
     let statusDescription = "";
@@ -131,7 +133,7 @@ exports.sendTransitUpdate = async (order) => {
         </div>
         
         <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000; text-align: center;">${statusTitle}</h2>
-        <p>Hello <strong>${order.shippingAddress?.fullName || order.shippingAddress?.name || "Customer"}</strong>,</p>
+        <p>Hello <strong>${addr.fullName || addr.name || "Customer"}</strong>,</p>
         <p>${statusDescription}</p>
         
         ${trackingBlock}
@@ -158,7 +160,7 @@ exports.sendTransitUpdate = async (order) => {
         
         <div style="margin-top: 25px; font-size: 12px; color: #777; background: #f9f9f9; padding: 15px; border-radius: 10px; border: 1px solid #eee;">
           <p style="margin: 0 0 5px 0;">Order ID: <strong>${orderNo}</strong></p>
-          <p style="margin: 0;">Delivery Address: ${order.shippingAddress?.address || ""}, ${order.shippingAddress?.city || ""}, ${order.shippingAddress?.state || ""} - ${order.shippingAddress?.pincode || ""}</p>
+          <p style="margin: 0;">Delivery Address: ${addr.address || ""}, ${addr.city || ""}, ${addr.state || ""} - ${addr.pincode || ""}</p>
         </div>
         
         <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
@@ -187,6 +189,7 @@ exports.sendTicketRaisedNotification = async (query) => {
     if (!customerEmail) return;
 
     const ticketId = `#TKT-${query._id.toString().slice(-6).toUpperCase()}`;
+    const q = escapeFields(query);
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #eee; border-radius: 15px; color: #333; line-height: 1.5;">
@@ -196,13 +199,13 @@ exports.sendTicketRaisedNotification = async (query) => {
         </div>
         
         <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000; text-align: center;">Support Ticket Raised</h2>
-        <p>Hello <strong>${query.firstName} ${query.lastName || ""}</strong>,</p>
+        <p>Hello <strong>${q.firstName} ${q.lastName || ""}</strong>,</p>
         <p>We have received your support inquiry. A dedicated concierge specialist has been assigned to your request and will get back to you shortly.</p>
         
         <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #eee;">
           <p style="margin: 0 0 8px 0; font-size: 13px;"><strong>Ticket ID:</strong> ${ticketId}</p>
           <p style="margin: 0 0 8px 0; font-size: 13px;"><strong>Your Message:</strong></p>
-          <p style="margin: 0; font-size: 13px; color: #555; font-style: italic;">"${query.message}"</p>
+          <p style="margin: 0; font-size: 13px; color: #555; font-style: italic;">"${q.message}"</p>
         </div>
         
         <p>We aim to resolve all inquiries within 24 hours. You will receive an email notification as soon as our staff updates your ticket.</p>
@@ -233,6 +236,7 @@ exports.sendTicketUpdateNotification = async (query, updateMessage) => {
     if (!customerEmail) return;
 
     const ticketId = `#TKT-${query._id.toString().slice(-6).toUpperCase()}`;
+    const q = escapeFields(query);
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #eee; border-radius: 15px; color: #333; line-height: 1.5;">
@@ -242,17 +246,17 @@ exports.sendTicketUpdateNotification = async (query, updateMessage) => {
         </div>
         
         <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000; text-align: center;">Support Ticket Updated</h2>
-        <p>Hello <strong>${query.firstName} ${query.lastName || ""}</strong>,</p>
+        <p>Hello <strong>${q.firstName} ${q.lastName || ""}</strong>,</p>
         <p>Our concierge staff has posted an update to your support ticket <strong>${ticketId}</strong>:</p>
         
         <div style="background: #f4fdf9; padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid #d1f2e5; box-shadow: 0 4px 12px rgba(0,0,0,0.01);">
           <p style="margin: 0 0 5px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #008060; font-weight: bold;">Concierge Staff Response:</p>
-          <p style="margin: 0; font-size: 14px; color: #111; font-weight: 550; white-space: pre-line;">${updateMessage}</p>
+          <p style="margin: 0; font-size: 14px; color: #111; font-weight: 550; white-space: pre-line;">${escapeHtml(updateMessage)}</p>
         </div>
         
         <div style="background: #f9f9f9; padding: 12px; border-radius: 8px; margin: 15px 0; border: 1px solid #eee; font-size: 12px;">
           <p style="margin: 0 0 4px 0; color: #777;"><strong>Original Inquiry:</strong></p>
-          <p style="margin: 0; color: #555; font-style: italic;">"${query.message}"</p>
+          <p style="margin: 0; color: #555; font-style: italic;">"${q.message}"</p>
         </div>
         
         <p>To reply to this update, simply reply directly to this email.</p>
@@ -275,7 +279,96 @@ exports.sendTicketUpdateNotification = async (query, updateMessage) => {
   }
 };
 
-// 4. Send Back-in-Stock Notification Email
+// 4. Send Owner New Paid Order Alert
+exports.sendOwnerNewOrderAlert = async (order) => {
+  try {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.log(`[TEST MODE] Owner new-order alert simulated for ${order.orderNumber}`);
+      return { simulated: true };
+    }
+
+    const ownerEmail = process.env.OWNER_NOTIFY_EMAIL || "hiteshkathpal20@gmail.com";
+    const transporter = getTransporter();
+    const orderNo = order.orderNumber || `#ORD-${order._id.toString().slice(-6).toUpperCase()}`;
+    const addr = escapeFields(order.shippingAddress || {});
+    const customerName = addr.name || addr.fullName || "Customer";
+    const customerPhone = addr.phone || "";
+    const customerEmail = addr.email || order.user?.email || "";
+    const paymentStatus = order.paymentStatus || "paid";
+
+    const itemsRows = (order.items || []).map((item) => `
+      <tr>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; text-align: left;">
+          <strong>${escapeHtml(item.name)}</strong>
+          ${item.variantSku ? `<br/><span style="font-size: 10px; color: #999;">SKU: ${escapeHtml(item.variantSku)}</span>` : ""}
+        </td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; text-align: center;">${item.quantity}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; text-align: right;">₹${Number(item.price || 0).toLocaleString("en-IN")}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; text-align: right; font-weight: bold;">₹${(Number(item.price || 0) * Number(item.quantity || 0)).toLocaleString("en-IN")}</td>
+      </tr>
+    `).join("");
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 25px; border: 1px solid #eee; border-radius: 12px; color: #333; line-height: 1.5;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <img src="${logoUrl}" alt="Samay Watch" style="max-height: 40px; margin: 0 auto; display: block;" />
+          <p style="font-size: 10px; color: #888; letter-spacing: 3px; margin-top: 5px; text-transform: uppercase;">New Paid Order</p>
+        </div>
+
+        <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000; margin: 0 0 16px 0;">New online order received</h2>
+        <p style="margin: 0 0 18px 0;">A paid order has been confirmed and needs fulfillment.</p>
+
+        <div style="background: #fafafa; border: 1px solid #f0f0f0; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
+          <p style="margin: 0 0 6px 0;"><strong>Order:</strong> ${escapeHtml(orderNo)}</p>
+          <p style="margin: 0 0 6px 0;"><strong>Payment:</strong> ${escapeHtml(paymentStatus)}</p>
+          <p style="margin: 0 0 6px 0;"><strong>Total:</strong> ₹${Number(order.total || 0).toLocaleString("en-IN")}</p>
+          <p style="margin: 0 0 6px 0;"><strong>Customer:</strong> ${customerName}</p>
+          <p style="margin: 0 0 6px 0;"><strong>Phone:</strong> ${escapeHtml(customerPhone) || "—"}</p>
+          <p style="margin: 0;"><strong>Email:</strong> ${escapeHtml(customerEmail) || "—"}</p>
+        </div>
+
+        <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin: 0 0 10px 0;">Items</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <thead>
+            <tr style="background: #f9f9f9; font-size: 11px; text-transform: uppercase; color: #666;">
+              <th style="padding: 8px; text-align: left; border-bottom: 2px solid #eee;">Item</th>
+              <th style="padding: 8px; text-align: center; border-bottom: 2px solid #eee;">Qty</th>
+              <th style="padding: 8px; text-align: right; border-bottom: 2px solid #eee;">Price</th>
+              <th style="padding: 8px; text-align: right; border-bottom: 2px solid #eee;">Line</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRows}
+          </tbody>
+        </table>
+
+        <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin: 0 0 8px 0;">Ship To</h3>
+        <p style="margin: 0; font-size: 13px; color: #555; line-height: 1.6;">
+          <strong>${customerName}</strong><br/>
+          ${addr.address || ""}<br/>
+          ${addr.addressLine2 ? `${addr.addressLine2}<br/>` : ""}
+          ${addr.city || ""}${addr.city && (addr.state || addr.pincode || addr.zip) ? ", " : ""}${addr.state || ""} ${addr.pincode || addr.zip || ""}<br/>
+          India
+        </p>
+      </div>
+    `;
+
+    const info = await transporter.sendMail({
+      from: senderEmail,
+      to: ownerEmail,
+      subject: `New Paid Order ${orderNo} — ₹${Number(order.total || 0).toLocaleString("en-IN")}`,
+      html: htmlContent,
+    });
+
+    console.log(`✉️ Owner new-order alert dispatched for ${orderNo} to ${ownerEmail}`);
+    return info;
+  } catch (error) {
+    console.error("❌ Failed to send owner new-order alert:", error.message);
+    throw error;
+  }
+};
+
+// 5. Send Back-in-Stock Notification Email
 exports.sendBackInStockNotification = async (email, userName, product) => {
   try {
     const transporter = getTransporter();
@@ -301,7 +394,7 @@ exports.sendBackInStockNotification = async (email, userName, product) => {
         </div>
         
         <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000; text-align: center;">It's Back in Stock!</h2>
-        <p>Hello <strong>${userName || "Valued Customer"}</strong>,</p>
+        <p>Hello <strong>${escapeHtml(userName) || "Valued Customer"}</strong>,</p>
         <p>Great news! The luxury timepiece you were waiting for is back in stock and ready to order. We only have limited inventory, so make sure to secure yours before it sells out again!</p>
         
         <!-- Product Card Block -->

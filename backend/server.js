@@ -34,7 +34,13 @@ const frontendUrls = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split('
 const allowedOrigins = [
   ...frontendUrls,
   "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5180",
   "http://localhost:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "http://127.0.0.1:5180",
+  "http://127.0.0.1:3000",
   "https://inventory.samaywatch.in",
   "https://test.samaywatch.in",
   "https://samaywatch.in",
@@ -140,10 +146,14 @@ async function startServer() {
   });
 }
 
-startServer().catch((e) => {
-  console.error("❌ Failed to start server:", e);
-  process.exit(1);
-});
+if (require.main === module) {
+  startServer().catch((e) => {
+    console.error("❌ Failed to start server:", e);
+    process.exit(1);
+  });
+}
+
+module.exports = app;
 
 // Trigger reload for Port 587 SMTP configuration update
 

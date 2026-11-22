@@ -21,6 +21,8 @@ router.get("/payment-details/:paymentId", getPaymentDetails);
 
 // Shiprocket Integration Endpoints
 router.get("/shiprocket/serviceability", checkServiceability);
+// Prefer /courier/webhook in Shiprocket UI — their form rejects URLs containing "shiprocket"
+router.post("/courier/webhook", handleShiprocketWebhook);
 router.post("/shiprocket/webhook", handleShiprocketWebhook);
 
 module.exports = router;
