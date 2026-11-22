@@ -10,6 +10,7 @@ const { logActivity } = require("../utils/logActivity");
 const { updateDashboardStatsInBackground } = require("./productController");
 const nodemailer = require("nodemailer");
 const shiprocketService = require("../services/shiprocketService");
+const { escapeFields } = require("../utils/escapeHtml");
 
 // Reusable server-side high-fidelity HTML Invoice Generator for email attachments
 function buildInvoiceHtml(order) {
@@ -47,7 +48,7 @@ function buildInvoiceHtml(order) {
     </tr>
   `).join('');
 
-  const shippingAddress = order.shippingAddress || {};
+  const shippingAddress = escapeFields(order.shippingAddress);
 
   // Pre-calculate conditional rows to avoid nesting backticks
   let discountRowsHtml = '';
@@ -666,6 +667,18 @@ exports.verifyPayment = async (req, res) => {
       // Trigger background stats update to keep IMS Dashboard in sync
       updateDashboardStatsInBackground();
 
+      // Notify store owner of new paid order (non-blocking; independent of customer email)
+      if (updatedOrder) {
+        setImmediate(async () => {
+          try {
+            const emailService = require("../utils/emailService");
+            await emailService.sendOwnerNewOrderAlert(updatedOrder);
+          } catch (ownerErr) {
+            console.error("❌ Failed to dispatch owner new-order alert:", ownerErr.message || ownerErr);
+          }
+        });
+      }
+
       // Send receipt email to customer asynchronously (non-blocking)
       setImmediate(async () => {
         try {
@@ -735,6 +748,7 @@ exports.verifyPayment = async (req, res) => {
 
             // Generate high-fidelity HTML invoice attachment
             const invoiceHtml = buildInvoiceHtml(updatedOrder);
+            const addr = escapeFields(updatedOrder.shippingAddress);
 
             const senderEmail = process.env.EMAIL_FROM || `"Samay Watch" <orders@samaywatch.in>`;
 
@@ -750,7 +764,7 @@ exports.verifyPayment = async (req, res) => {
                   </div>
                   
                   <h2 style="font-size: 20px; font-weight: normal; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #000;">Thank you for your purchase!</h2>
-                  <p>Hello <strong>${updatedOrder.shippingAddress?.name || 'Customer'}</strong>,</p>
+                  <p>Hello <strong>${addr.name || 'Customer'}</strong>,</p>
                   <p>We are delighted to confirm your order. Your premium timepiece is being prepared for secure, fully insured dispatch.</p>
                   
                   <div style="background-color: #fcfcfc; border: 1px solid #f0f0f0; border-radius: 10px; padding: 20px; margin: 25px 0;">
@@ -798,11 +812,11 @@ exports.verifyPayment = async (req, res) => {
 
                   <h3 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #0b3a82; border-bottom: 2px solid #0b3a82; padding-bottom: 5px; margin-top: 40px; text-align: left;">Shipping Address</h3>
                   <p style="line-height: 1.6; font-size: 13px; color: #555; margin-top: 10px; text-align: left;">
-                    <strong>${updatedOrder.shippingAddress?.name || ''}</strong><br/>
-                    ${updatedOrder.shippingAddress?.address || ''}<br/>
-                    ${updatedOrder.shippingAddress?.addressLine2 ? updatedOrder.shippingAddress.addressLine2 + '<br/>' : ''}
-                    ${updatedOrder.shippingAddress?.city || ''} - ${updatedOrder.shippingAddress?.pincode || updatedOrder.shippingAddress?.zip || ''}<br/>
-                    ${updatedOrder.shippingAddress?.state || ''}<br/>
+                    <strong>${addr.name || ''}</strong><br/>
+                    ${addr.address || ''}<br/>
+                    ${addr.addressLine2 ? addr.addressLine2 + '<br/>' : ''}
+                    ${addr.city || ''} - ${addr.pincode || addr.zip || ''}<br/>
+                    ${addr.state || ''}<br/>
                     India
                   </p>
 
@@ -1167,7 +1181,8 @@ exports.checkServiceability = async (req, res) => {
 };
 
 // @desc    Shiprocket webhook callback receiver for order status updates
-// @route   POST /api/store/shiprocket/webhook
+// @route   POST /api/store/courier/webhook (preferred; Shiprocket UI bans "shiprocket" in URLs)
+// @route   POST /api/store/shiprocket/webhook (legacy alias)
 // @access  Public
 exports.handleShiprocketWebhook = async (req, res) => {
   try {
@@ -1180,6 +1195,9 @@ exports.handleShiprocketWebhook = async (req, res) => {
       if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
         return res.status(401).json({ success: false, message: "Invalid webhook token" });
       }
+    } else if (process.env.NODE_ENV === "production") {
+      console.error("❌ SHIPROCKET_WEBHOOK_TOKEN is not set; rejecting webhook.");
+      return res.status(503).json({ success: false, message: "Webhook is not configured" });
     } else {
       console.warn("⚠️ SHIPROCKET_WEBHOOK_TOKEN is not set; accepting webhook without verification.");
     }

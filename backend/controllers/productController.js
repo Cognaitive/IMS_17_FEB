@@ -7,6 +7,7 @@ const { migrateLegacyImages, migrateLegacyImagesInline } = require("../utils/mig
 const { compareProductChanges } = require("../utils/compareProductChanges");
 const { isStorefrontEligible, hasMinimalStorefrontData } = require("../utils/storeEligibility");
 const { migrateUrlsToDoSpaces, migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
+const { canAccessBrand, staffWriteError } = require("../utils/staffPermissions");
 
 // Keep image sequence deterministic and sync first image as primary.
 const normalizeImageList = (images) => {
@@ -189,11 +190,14 @@ const getProduct = async (req, res) => {
   try {
     // Include legacy fields for migration: imageUrl, image.url
     const product = await Product.findById(req.params.id)
-      .select('brand sku category inventory price oldPrice images imageUrl image.url description title caseMaterial dialColor waterResistance warrantyPeriod movement gender strapColor caseShape caseSize strapMaterial createdAt updatedAt')
+      .select('brand sku category inventory price oldPrice images imageUrl image.url description title caseMaterial dialColor waterResistance warrantyPeriod movement gender strapColor caseShape caseSize strapMaterial seoTitle seoDescription seoKeywords seoImage createdAt updatedAt')
       .lean();
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
+    }
+    if (!canAccessBrand(req.user, product.brand)) {
+      return res.status(403).json({ message: "You don't have access to this brand" });
     }
 
     // Debug: Log to verify images are included
@@ -214,6 +218,11 @@ const createProduct = async (req, res) => {
     const { error } = validateProduct(req.body);
     if (error) {
       return res.status(400).json({ message: error.details[0].message });
+    }
+
+    const denied = staffWriteError(req.user, null, req.body);
+    if (denied) {
+      return res.status(403).json({ message: denied });
     }
 
     // Default behavior: oldPrice = price when product is created
@@ -276,6 +285,11 @@ const updateProduct = async (req, res) => {
     const currentProduct = await Product.findById(req.params.id);
     if (!currentProduct) {
       return res.status(404).json({ message: "Product not found" });
+    }
+
+    const denied = staffWriteError(req.user, currentProduct, req.body);
+    if (denied) {
+      return res.status(403).json({ message: denied });
     }
 
     const previousPrice = currentProduct.price || 0;
@@ -374,6 +388,11 @@ const patchProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
+    const denied = staffWriteError(req.user, currentProduct, updates);
+    if (denied) {
+      return res.status(403).json({ message: denied });
+    }
+
     const previousPrice = currentProduct.price || 0;
 
     // Build update object with $set for partial updates
@@ -400,6 +419,10 @@ const patchProduct = async (req, res) => {
       "caseShape",
       "caseSize",
       "strapMaterial",
+      "seoTitle",
+      "seoDescription",
+      "seoKeywords",
+      "seoImage",
     ];
 
     for (const key of Object.keys(updates)) {
@@ -532,6 +555,13 @@ const bulkPatchProducts = async (req, res) => {
       return res.status(404).json({ message: "No matching products found" });
     }
 
+    for (const product of products) {
+      const denied = staffWriteError(req.user, product, updateObj);
+      if (denied) {
+        return res.status(403).json({ message: `${product.sku || product._id}: ${denied}` });
+      }
+    }
+
     const bulkOps = [];
     const activityLogs = [];
     let brandUpdated = updates.brand !== undefined;
@@ -622,6 +652,13 @@ const bulkDeleteProducts = async (req, res) => {
       return res.status(404).json({ message: "No matching products found" });
     }
 
+    for (const product of products) {
+      const denied = staffWriteError(req.user, product);
+      if (denied) {
+        return res.status(403).json({ message: `${product.sku || product._id}: ${denied}` });
+      }
+    }
+
     // Perform deletion
     await Product.deleteMany({ _id: { $in: ids } });
 
@@ -663,10 +700,16 @@ const bulkDeleteProducts = async (req, res) => {
 // @access  Private
 const deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndDelete(req.params.id);
+    const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
+
+    const denied = staffWriteError(req.user, product);
+    if (denied) {
+      return res.status(403).json({ message: denied });
+    }
+    await product.deleteOne();
 
     // Clear brands cache when product is deleted
     clearBrandsCache();
