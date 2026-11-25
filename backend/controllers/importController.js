@@ -8,6 +8,13 @@ const { hasMinimalStorefrontData } = require("../utils/storeEligibility");
 const { generateProductSlug } = require("../utils/slugify");
 const { staffWriteError } = require("../utils/staffPermissions");
 const { clearBrandsCache } = require("./productController");
+const {
+  filterPatchForExisting,
+} = require("../scripts/enrichment/lib/merge");
+const { toCanonicalGender } = require("../scripts/enrichment/lib/gender");
+const {
+  normalizeProductFields,
+} = require("../scripts/enrichment/lib/normalize");
 
 // Zero-dependency CSV parser that safely respects quotes, escaped quotes, embedded commas and newlines
 function parseCSV(text) {
@@ -111,7 +118,7 @@ const downloadSampleCSV = async (req, res) => {
         "300m",
         "5 Years",
         "Automatic",
-        "Men",
+        "Male",
         "Silver",
         "Oystersteel",
         "Round",
@@ -159,7 +166,7 @@ const downloadSampleCSV = async (req, res) => {
         "100m",
         "2 Years",
         "Automatic",
-        "Men",
+        "Male",
         "Blue",
         "Nylon Fabric",
         "Round",
@@ -253,6 +260,13 @@ function readSkuGroup(rows, colIdx) {
     if (value !== "") data[field] = value;
   });
 
+  // Map Women/Men/… → Female/Male/Unisex; unknown → leave empty for staff review
+  if (data.gender) {
+    const mapped = toCanonicalGender(data.gender);
+    if (mapped) data.gender = mapped;
+    else delete data.gender;
+  }
+
   const numeric = [["price", "price", "Price"], ["oldprice", "oldPrice", "Old price"], ["inventory", "inventory", "Inventory"]];
   numeric.forEach(([col, field, label]) => {
     const raw = cellOf(primary, colIdx[col]);
@@ -292,7 +306,12 @@ function readSkuGroup(rows, colIdx) {
   const images = [...new Set(imagesWithPos.map((i) => i.url))];
   if (images.length > 0) data.images = images;
 
-  return { data, images, problems };
+  // Align constrained dropdown fields to IMS option lists (unknown → blank)
+  const { product: normalized } = normalizeProductFields(data);
+  delete normalized._fieldMapped;
+  delete normalized._fieldUnmapped;
+
+  return { data: normalized, images, problems };
 }
 
 // Move external image links to DigitalOcean one product at a time, after the response is sent.
@@ -396,6 +415,14 @@ const importCSV = async (req, res) => {
       if (b.name) brandCategory.set(b.name.trim().toLowerCase(), b.category);
     });
 
+    // Staff-wins by default: only fill empty fields on existing products.
+    // Opt-in destructive update: ?forceOverwrite=true or body/header flag.
+    const forceOverwrite =
+      req.query.forceOverwrite === "true" ||
+      req.query.forceOverwrite === "1" ||
+      req.body?.forceOverwrite === true ||
+      req.headers["x-force-overwrite"] === "true";
+
     const updateOps = [];
     const updateMeta = [];
     const newDocs = [];
@@ -418,23 +445,54 @@ const importCSV = async (req, res) => {
       }
 
       if (existing) {
-        const merged = { ...existing, ...data };
+        // Non-destructive merge: drop fields that staff already filled
+        const { patch } = filterPatchForExisting(existing, data, {
+          forceOverwrite,
+        });
+        // Preserve isPublished from CSV only when explicitly provided AND
+        // (forceOverwrite or existing has no value) — still respect staff.
+        if (
+          data.isPublished !== undefined &&
+          (forceOverwrite || existing.isPublished == null)
+        ) {
+          patch.isPublished = data.isPublished;
+        }
+
+        const merged = { ...existing, ...patch };
         const changes = compareProductChanges(existing, merged);
         const otherChanged =
-          (data.title !== undefined && data.title !== (existing.title || "")) ||
-          (data.slug !== undefined && data.slug !== (existing.slug || "")) ||
-          (data.strapMaterial !== undefined && data.strapMaterial !== (existing.strapMaterial || "")) ||
-          (data.isPublished !== undefined && data.isPublished !== existing.isPublished);
+          (patch.title !== undefined && patch.title !== (existing.title || "")) ||
+          (patch.slug !== undefined && patch.slug !== (existing.slug || "")) ||
+          (patch.strapMaterial !== undefined &&
+            patch.strapMaterial !== (existing.strapMaterial || "")) ||
+          (patch.isPublished !== undefined &&
+            patch.isPublished !== existing.isPublished);
         if (!changes && !otherChanged) {
           unchangedCount++;
           continue;
         }
-        updateOps.push({ updateOne: { filter: { _id: existing._id }, update: { $set: data } } });
-        updateMeta.push({ rowLabel, sku: existing.sku, existing, data, changes, images });
+        const imagesForMeta =
+          patch.images && patch.images.length ? patch.images : [];
+        updateOps.push({
+          updateOne: { filter: { _id: existing._id }, update: { $set: patch } },
+        });
+        updateMeta.push({
+          rowLabel,
+          sku: existing.sku,
+          existing,
+          data: patch,
+          changes,
+          images: imagesForMeta,
+        });
       } else {
         const doc = { ...data, sku: group.sku, user: req.user.id };
         if (doc.oldPrice === undefined) doc.oldPrice = doc.price || 0;
-        if (doc.isPublished === undefined) doc.isPublished = hasMinimalStorefrontData(doc);
+        // New imports stay unpublished until owner/admin Approves & publishes
+        // (unless CSV explicitly sets isPublished).
+        if (doc.isPublished === undefined) doc.isPublished = false;
+        else if (doc.isPublished === true && !hasMinimalStorefrontData(doc)) {
+          doc.isPublished = false;
+        }
         const cat = brandCategory.get(doc.brand.toLowerCase());
         if (cat && (!doc.category || WATCH_TYPE_CATEGORIES.includes(doc.category))) {
           if (WATCH_TYPE_CATEGORIES.includes(doc.category) && !doc.movement) doc.movement = doc.category;

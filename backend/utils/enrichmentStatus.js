@@ -21,18 +21,18 @@ const {
   ENRICHABLE_BRANDS,
 } = require("../controllers/enrichmentController");
 
-const balmain = require("../../scripts/enrichment/brands/balmain");
-const titan = require("../../scripts/enrichment/brands/titan");
-const timex = require("../../scripts/enrichment/brands/timex");
-const tissot = require("../../scripts/enrichment/brands/tissot");
-const fossil = require("../../scripts/enrichment/brands/fossil");
-const casio = require("../../scripts/enrichment/brands/casio");
-const seiko = require("../../scripts/enrichment/brands/seiko");
-const longines = require("../../scripts/enrichment/brands/longines");
+const balmain = require("../scripts/enrichment/brands/balmain");
+const titan = require("../scripts/enrichment/brands/titan");
+const timex = require("../scripts/enrichment/brands/timex");
+const tissot = require("../scripts/enrichment/brands/tissot");
+const fossil = require("../scripts/enrichment/brands/fossil");
+const casio = require("../scripts/enrichment/brands/casio");
+const seiko = require("../scripts/enrichment/brands/seiko");
+const longines = require("../scripts/enrichment/brands/longines");
 
 const ENRICHMENT_OUTPUT = path.join(
   __dirname,
-  "../../scripts/enrichment/output"
+  "../scripts/enrichment/output"
 );
 
 function compactFallback(raw) {

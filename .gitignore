@@ -26,3 +26,10 @@ store-frontend/.env.deploy
 
 # Local scrape HTML fixtures (large; not needed on DO)
 scripts/enrichment/fixtures/
+
+# Backend-vendored enrichment runtime artifacts
+backend/scripts/enrichment/output/
+backend/scripts/enrichment/images/
+backend/scripts/enrichment/fixtures/
+backend/scripts/enrichment/node_modules/
+backend/scripts/enrichment/tunnel/*.json
