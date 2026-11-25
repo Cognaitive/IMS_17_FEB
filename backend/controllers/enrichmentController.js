@@ -16,27 +16,27 @@ const {
   scrapedToIncoming,
   buildMergePreview,
   collectImageUrls,
-} = require("../../scripts/enrichment/lib/merge");
-const { normalizeGender } = require("../../scripts/enrichment/lib/gender");
+} = require("../scripts/enrichment/lib/merge");
+const { normalizeGender } = require("../scripts/enrichment/lib/gender");
 const {
   filterUsableImageUrls,
-} = require("../../scripts/enrichment/lib/imageProbe");
-const balmain = require("../../scripts/enrichment/brands/balmain");
-const titan = require("../../scripts/enrichment/brands/titan");
-const timex = require("../../scripts/enrichment/brands/timex");
-const tissot = require("../../scripts/enrichment/brands/tissot");
-const fossil = require("../../scripts/enrichment/brands/fossil");
-const casio = require("../../scripts/enrichment/brands/casio");
-const seiko = require("../../scripts/enrichment/brands/seiko");
-const longines = require("../../scripts/enrichment/brands/longines");
-const rado = require("../../scripts/enrichment/brands/rado");
-const emporioArmani = require("../../scripts/enrichment/brands/emporio-armani");
-const armaniExchange = require("../../scripts/enrichment/brands/armani-exchange");
-const earnshaw = require("../../scripts/enrichment/brands/earnshaw");
-const alexandreChristie = require("../../scripts/enrichment/brands/alexandre-christie");
-const michaelKors = require("../../scripts/enrichment/brands/michael-kors");
+} = require("../scripts/enrichment/lib/imageProbe");
+const balmain = require("../scripts/enrichment/brands/balmain");
+const titan = require("../scripts/enrichment/brands/titan");
+const timex = require("../scripts/enrichment/brands/timex");
+const tissot = require("../scripts/enrichment/brands/tissot");
+const fossil = require("../scripts/enrichment/brands/fossil");
+const casio = require("../scripts/enrichment/brands/casio");
+const seiko = require("../scripts/enrichment/brands/seiko");
+const longines = require("../scripts/enrichment/brands/longines");
+const rado = require("../scripts/enrichment/brands/rado");
+const emporioArmani = require("../scripts/enrichment/brands/emporio-armani");
+const armaniExchange = require("../scripts/enrichment/brands/armani-exchange");
+const earnshaw = require("../scripts/enrichment/brands/earnshaw");
+const alexandreChristie = require("../scripts/enrichment/brands/alexandre-christie");
+const michaelKors = require("../scripts/enrichment/brands/michael-kors");
 
-const ENRICHMENT_ROOT = path.join(__dirname, "../../scripts/enrichment");
+const ENRICHMENT_ROOT = path.join(__dirname, "../scripts/enrichment");
 const ENRICHMENT_OUTPUT = path.join(ENRICHMENT_ROOT, "output");
 const FIXTURES_DIR = path.join(ENRICHMENT_ROOT, "fixtures");
 
