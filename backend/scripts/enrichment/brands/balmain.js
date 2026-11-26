@@ -13,18 +13,24 @@ const {
   enrichFromTataCliq,
   SOURCE_ID: TATA_SOURCE,
 } = require("../lib/tatacliq");
+const {
+  enrichFromRetailerChain,
+  recoverAfterOfficialMiss,
+  OFFICIAL_FAIL_CODES,
+  SOURCE: RETAILER_SOURCE,
+} = require("../lib/retailerFallback");
 
 const BRAND = "Balmain";
 const SITE_ORIGIN = "https://www.balmainwatches.com";
 const SOURCE_OFFICIAL = "balmainwatches";
+const SOURCE_COLLECTIVE = RETAILER_SOURCE.COLLECTIVE;
+const SOURCE_TATA = TATA_SOURCE || RETAILER_SOURCE.TATA;
+const SOURCE_TGT = RETAILER_SOURCE.TGT;
+const SOURCE_ETHOS = RETAILER_SOURCE.ETHOS;
 const LANG = "en";
 
-/** Official PDP missing / India-only — allow Tata Cliq Luxury fallback */
-const OFFICIAL_FAIL_CODES = new Set([
-  "not_found",
-  "fetch_failed",
-  "error",
-]);
+const SOFT_MISS_HINT =
+  "Official balmainwatches.com blocked or missing; retailer chain missed — save PDP HTML to fixtures/ or pass tatacliq_url";
 
 /** Map official attribute labels → Product schema fields */
 const ATTR_MAP = {
@@ -457,7 +463,7 @@ async function enrichSkuFromTataCliq(sku, options = {}) {
     });
     if (product.status !== "ok") return product;
     Object.assign(product, buildSeo(product, { metaDescription: "" }));
-    product.source = TATA_SOURCE;
+    product.source = SOURCE_TATA;
     product.warnings = product.warnings || [];
     if (!product.warnings.includes("india_only_tatacliq_fallback")) {
       product.warnings.push("india_only_tatacliq_fallback");
@@ -468,16 +474,57 @@ async function enrichSkuFromTataCliq(sku, options = {}) {
       status: err.code || "error",
       sku: normalized.compact,
       brand: BRAND,
-      source: TATA_SOURCE,
+      source: SOURCE_TATA,
       reason: err.message,
       scrapedAt: new Date().toISOString(),
     };
   }
 }
 
+async function enrichFromRetailerFallback(sku, options = {}) {
+  const { product, attempts } = await enrichFromRetailerChain(sku, {
+    ...options,
+    brandHint: BRAND,
+    preset: "luxury",
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  });
+  return { product, attempts };
+}
+
 async function enrichSku(sku, options = {}) {
   const normalized = normalizeSku(sku);
+  const recoverOpts = {
+    ...options,
+    brandHint: BRAND,
+    brand: BRAND,
+    sku: normalized.compact,
+    sourceOfficial: SOURCE_OFFICIAL,
+    softMissHint: SOFT_MISS_HINT,
+    blockLabel: "balmainwatches.com HTML fetch blocked",
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  };
 
+  if (
+    options.collectiveOnly ||
+    options.tgtLuxeOnly ||
+    options.ethosOnly
+  ) {
+    return recoverAfterOfficialMiss(
+      sku,
+      {
+        status: "not_found",
+        reason: "retailer-only scrape",
+        sku: normalized.compact,
+        brand: BRAND,
+        source: SOURCE_OFFICIAL,
+      },
+      recoverOpts
+    );
+  }
+
+  // Back-compat: tataCliqOnly still hits Tata directly
   if (options.tataCliqOnly) {
     return enrichSkuFromTataCliq(sku, options);
   }
@@ -512,36 +559,22 @@ async function enrichSku(sku, options = {}) {
       brand: BRAND,
       source: SOURCE_OFFICIAL,
       reason: err.message,
+      sourceUrl: err.sourceUrl || null,
       scrapedAt: new Date().toISOString(),
     };
   }
 
-  if (shouldTryTataCliq(officialResult, options)) {
-    console.warn(
-      `  official miss (${officialResult.status}: ${officialResult.reason}); trying Tata Cliq Luxury…`
-    );
-    const tata = await enrichSkuFromTataCliq(sku, options);
-    if (tata.status === "ok") {
-      tata.officialFallbackReason = officialResult.reason;
-      return tata;
-    }
-    return {
-      ...officialResult,
-      tataCliqAttempt: {
-        status: tata.status,
-        reason: tata.reason,
-        sourceUrl: tata.sourceUrl || null,
-      },
-    };
-  }
-
-  return officialResult;
+  return recoverAfterOfficialMiss(sku, officialResult, recoverOpts);
 }
 
 module.exports = {
   BRAND,
   SITE_ORIGIN,
   SOURCE_OFFICIAL,
+  SOURCE_COLLECTIVE,
+  SOURCE_TATA,
+  SOURCE_TGT,
+  SOURCE_ETHOS,
   ATTR_MAP,
   normalizeSku,
   extractAttributes,
@@ -550,6 +583,7 @@ module.exports = {
   uncacheMediaUrl,
   mapProduct,
   resolveProductUrl,
+  enrichFromRetailerFallback,
   fetchProductHtml,
   enrichSku,
   enrichSkuFromTataCliq,

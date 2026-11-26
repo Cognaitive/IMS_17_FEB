@@ -181,9 +181,7 @@ function specsFromBullets(bullets, ld) {
     } else if (/water\s*resistant/i.test(b) || /\b\d+\s*atm\b/i.test(low)) {
       mapped.waterResistance = b;
     } else if (/warrant/i.test(b)) {
-      // Canonical IMS form is "N years" (normalize rejects hyphenated "2-year")
-      const ym = b.match(/(\d+(?:\.\d+)?)\s*-?\s*years?/i);
-      mapped.warrantyPeriod = ym ? `${ym[1]} years` : b;
+      mapped.warrantyPeriod = b;
     } else if (/leather/i.test(b)) {
       mapped.strapMaterial = "Leather";
     } else if (/silicone|rubber/i.test(b)) {
@@ -413,7 +411,7 @@ function mapProduct(html, skuInput, sourceUrl) {
     `Michael Kors ${sku.compact}`;
 
   const blurbMatch = String(html || "").match(
-    /((?:Lexington|This|Our)\b[\s\S]{40,500}?contemporary\.)/i
+    /([A-Z][a-z]+ evolves[\s\S]{40,450}?\.)/
   );
   const blurb = blurbMatch
     ? stripTags(blurbMatch[1]).replace(/\s+/g, " ").trim()

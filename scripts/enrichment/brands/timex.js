@@ -3,12 +3,19 @@
 /**
  * Timex India (shop.timexindia.com) enrichment — Shopify storefront.
  * TWEG* IMS SKUs are Timex, not Titan.
+ *
+ * On official miss/block: Collective → Tata Cliq Luxury → TGT Luxe → Ethos.
  */
 
 const path = require("path");
 const fs = require("fs");
 const { fetchText, sleep } = require("../lib/http");
 const { buildSeo } = require("../lib/seo");
+const {
+  enrichFromRetailerChain,
+  recoverAfterOfficialMiss,
+  SOURCE: RETAILER_SOURCE,
+} = require("../lib/retailerFallback");
 const {
   normalizeProductFields,
   normalizeCaseSize,
@@ -18,6 +25,13 @@ const {
 const BRAND = "Timex";
 const SITE_ORIGIN = "https://shop.timexindia.com";
 const SOURCE_OFFICIAL = "timexindia";
+const SOURCE_COLLECTIVE = RETAILER_SOURCE.COLLECTIVE;
+const SOURCE_TATA = RETAILER_SOURCE.TATA;
+const SOURCE_TGT = RETAILER_SOURCE.TGT;
+const SOURCE_ETHOS = RETAILER_SOURCE.ETHOS;
+
+const SOFT_MISS_HINT =
+  "Official shop.timexindia.com blocked or missing; retailer chain missed — save PDP HTML to fixtures/ or pass tatacliq_url";
 
 /**
  * Known IMS / spreadsheet typos → shop.timexindia.com style codes.
@@ -592,30 +606,73 @@ async function fetchProductBundle(sku, options = {}) {
   };
 }
 
+async function enrichFromRetailerFallback(sku, options = {}) {
+  const { product, attempts } = await enrichFromRetailerChain(sku, {
+    ...options,
+    brandHint: BRAND,
+    preset: "luxury",
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  });
+  return { product, attempts };
+}
+
 async function enrichSku(sku, options = {}) {
   const normalized = normalizeSku(sku);
+  const recoverOpts = {
+    ...options,
+    brandHint: BRAND,
+    brand: BRAND,
+    sku: normalized.compact,
+    sourceOfficial: SOURCE_OFFICIAL,
+    softMissHint: SOFT_MISS_HINT,
+    blockLabel: "shop.timexindia.com HTML fetch blocked",
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  };
+
+  if (
+    options.collectiveOnly ||
+    options.tataCliqOnly ||
+    options.tgtLuxeOnly ||
+    options.ethosOnly
+  ) {
+    return recoverAfterOfficialMiss(
+      sku,
+      {
+        status: "not_found",
+        reason: "retailer-only scrape",
+        sku: normalized.compact,
+        brand: BRAND,
+        source: SOURCE_OFFICIAL,
+      },
+      recoverOpts
+    );
+  }
+
   try {
     const { html, sourceUrl, fromFixture, product, warnings } =
       await fetchProductBundle(sku, options);
     if (!product) {
-      return {
-        status: "not_found",
-        sku: normalized.compact,
-        brand: BRAND,
-        source: SOURCE_OFFICIAL,
-        reason: "Shopify product JSON missing",
-        sourceUrl,
-        scrapedAt: new Date().toISOString(),
-      };
+      return recoverAfterOfficialMiss(
+        sku,
+        {
+          status: "not_found",
+          reason: "Shopify product JSON missing",
+          sourceUrl,
+          sku: normalized.compact,
+          brand: BRAND,
+          source: SOURCE_OFFICIAL,
+        },
+        recoverOpts
+      );
     }
 
-    // Map using the page style when typo-corrected so officialSku aligns with site
     const mapSku =
       normalized.typoFrom && normalized.style !== normalized.compact
         ? normalized.style
         : sku;
     const mapped = mapFromShopify(product, html, mapSku, sourceUrl);
-    // Always keep IMS compact as product.sku so staff-wins merge hits the IMS row
     mapped.sku = normalized.compact;
     mapped.fetchMode = fromFixture ? "fixture" : "live";
     if (Array.isArray(warnings) && warnings.length) {
@@ -626,15 +683,18 @@ async function enrichSku(sku, options = {}) {
       product.title || ""
     }`.toUpperCase();
     if (!skuPresentOnPage(hay, normalized)) {
-      return {
-        status: "not_found",
-        sku: normalized.compact,
-        brand: BRAND,
-        source: SOURCE_OFFICIAL,
-        reason: "SKU not present on resolved Timex India page",
-        sourceUrl,
-        scrapedAt: new Date().toISOString(),
-      };
+      return recoverAfterOfficialMiss(
+        sku,
+        {
+          status: "not_found",
+          reason: "SKU not present on resolved Timex India page",
+          sourceUrl,
+          sku: normalized.compact,
+          brand: BRAND,
+          source: SOURCE_OFFICIAL,
+        },
+        recoverOpts
+      );
     }
 
     const matchedStyle = matchedStyleOnPage(hay, normalized);
@@ -656,14 +716,7 @@ async function enrichSku(sku, options = {}) {
     }
     return mapped;
   } catch (err) {
-    return {
-      status: err.code || "error",
-      sku: normalized.compact,
-      brand: BRAND,
-      source: SOURCE_OFFICIAL,
-      reason: err.message,
-      scrapedAt: new Date().toISOString(),
-    };
+    return recoverAfterOfficialMiss(sku, err, recoverOpts);
   }
 }
 
@@ -671,6 +724,10 @@ module.exports = {
   BRAND,
   SITE_ORIGIN,
   SOURCE_OFFICIAL,
+  SOURCE_COLLECTIVE,
+  SOURCE_TATA,
+  SOURCE_TGT,
+  SOURCE_ETHOS,
   ATTR_MAP,
   SKU_TYPO_MAP,
   normalizeSku,
@@ -681,6 +738,7 @@ module.exports = {
   extractSpecsFromHtml,
   mapFromShopify,
   fetchProductBundle,
+  enrichFromRetailerFallback,
   enrichSku,
   productJsonUrl,
 };
