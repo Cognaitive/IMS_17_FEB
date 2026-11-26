@@ -36,6 +36,15 @@ const REF_URLS = {
     "https://justintime.in/products/casio-edifice-men-quartz-grey-dial-chronograph-stainless-steel-watch-ed676-efr-539de-8avudf",
   "EFR-539DE-8AVUDF":
     "https://justintime.in/products/casio-edifice-men-quartz-grey-dial-chronograph-stainless-steel-watch-ed676-efr-539de-8avudf",
+  PWPUA0925:
+    "https://justintime.in/products/the-hexagon-phantom-men-quartz-silver-dial-analog-stainless-steel-watch-pwpua0925",
+  PWPUA1025:
+    "https://justintime.in/products/the-hexagon-phantom-men-quartz-black-dial-analog-stainless-steel-watch-pwpua1025",
+  // IMS uses digit 0; JIT lists letter O
+  PW0AA0722:
+    "https://justintime.in/products/philipp-plein-men-quartz-blue-dial-analog-stainless-steel-watch-pwoaa0722",
+  PWOAA0722:
+    "https://justintime.in/products/philipp-plein-men-quartz-blue-dial-analog-stainless-steel-watch-pwoaa0722",
 };
 
 function compactSku(raw) {
@@ -154,28 +163,40 @@ async function suggestBySku(sku, options = {}) {
   return null;
 }
 
+function zeroOhAliases(compact) {
+  const c = compactSku(compact);
+  if (!c) return [];
+  const out = new Set([c]);
+  if (/0/.test(c)) out.add(c.replace(/0/g, "O"));
+  if (/O/.test(c)) out.add(c.replace(/O/g, "0"));
+  return [...out];
+}
+
 async function resolveJustInTimeUrlBySku(sku, options = {}) {
   const compact = compactSku(sku);
   const ref = resolveRefUrl(compact, options);
   if (ref) return { url: normalizeJitUrl(ref), via: "ref_url" };
 
-  // Also try model aliases from options
+  // Also try model aliases from options (+ 0/O variants for Plein-style refs)
   const aliases = [
     options.model,
     options.officialSku,
     ...(options.styleCandidates || []),
+    ...zeroOhAliases(compact),
   ]
     .filter(Boolean)
     .map(compactSku);
-  for (const a of aliases) {
+  for (const a of [...new Set(aliases)]) {
     const r = REF_URLS[a] || resolveRefUrl(a, options);
     if (r) return { url: normalizeJitUrl(r), via: "ref_alias" };
   }
 
   if (options.resolveBySku === false) return null;
-  const suggested = await suggestBySku(sku, options);
-  if (suggested?.url) return suggested;
-  await sleep(options.delayMs || 200);
+  for (const q of [...new Set([sku, compact, ...zeroOhAliases(compact)])]) {
+    const suggested = await suggestBySku(q, options);
+    if (suggested?.url) return suggested;
+    await sleep(options.delayMs || 150);
+  }
   return null;
 }
 
@@ -268,7 +289,7 @@ function extractCodesFromHandle(handle, title) {
 }
 
 function mapJustInTimeProduct(shopifyProduct, skuInput, sourceUrl, options = {}) {
-  const brandHint = options.brandHint || "Casio";
+  const brandHint = options.brandHint || "Watch";
   const compact = compactSku(skuInput);
   const variant = (shopifyProduct.variants || [])[0] || {};
   const attrs = extractShopifyAttrs(shopifyProduct.body_html);
@@ -397,7 +418,7 @@ function fixtureJsonPath(fixtureDir, sku) {
 }
 
 async function enrichFromJustInTime(sku, options = {}) {
-  const brandHint = options.brandHint || "Casio";
+  const brandHint = options.brandHint || "Watch";
   const compact = compactSku(sku);
 
   if (options.preferFixture || options.jitJsonPath) {
@@ -464,7 +485,13 @@ async function enrichFromJustInTime(sku, options = {}) {
     .join(" ")
     .toUpperCase()
     .replace(/[.\-_\s]/g, "");
-  if (compact && !hay.includes(compact)) {
+  const candidateKeys = [
+    compact,
+    ...zeroOhAliases(compact),
+    ...(options.styleCandidates || []).map(compactSku),
+  ].filter(Boolean);
+  const hayHit = candidateKeys.some((k) => hay.includes(k));
+  if (compact && !hayHit) {
     // Model-only match (ED676 page when searching EFR-539DE-8AV)
     const modelKey = compactSku(product.officialSku);
     if (!modelKey || !hay.includes(modelKey)) {
@@ -479,6 +506,22 @@ async function enrichFromJustInTime(sku, options = {}) {
       };
     }
   }
+  // Preserve IMS compact SKU when JIT lists O/0 variant
+  product.sku = compact || product.sku;
+  if (
+    compact &&
+    product.officialSku &&
+    compactSku(product.officialSku) !== compact &&
+    zeroOhAliases(compact).includes(compactSku(product.officialSku))
+  ) {
+    product.warnings = product.warnings || [];
+    product.warnings.push(
+      `jit_near_match_${compactSku(product.officialSku)}`
+    );
+    product.typoFrom = compact;
+    product.matchedStyle = compactSku(product.officialSku);
+    product.nearMatchMethod = "zero_oh";
+  }
 
   if (options.delayMs) await sleep(options.delayMs);
   return product;
@@ -489,6 +532,7 @@ module.exports = {
   SOURCE_ID,
   REF_URLS,
   compactSku,
+  zeroOhAliases,
   normalizeJitUrl,
   pdpUrlFromHandle,
   productJsonUrl,

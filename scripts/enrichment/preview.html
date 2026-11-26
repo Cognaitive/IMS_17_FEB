@@ -1,0 +1,2866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Samay · enrichment preview</title>
+  <style>
+    :root {
+      --bg: #f3f2ef;
+      --panel: #fff;
+      --ink: #1a1a1a;
+      --muted: #5c5c5c;
+      --line: #d8d5ce;
+      --accent: #1f4b3a;
+      --accent-hover: #16382b;
+      --ok: #1b6b3a;
+      --err: #9b1c1c;
+      --warn: #8a5a00;
+      --sidebar: #ebe8e1;
+      --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+      --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+      --touch: 44px;
+      --sidebar-w: 260px;
+    }
+    * { box-sizing: border-box; }
+    html {
+      overflow-x: hidden;
+      height: 100%;
+    }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 80% 50% at 0% 0%, #e8e4dc 0%, transparent 55%),
+        var(--bg);
+      line-height: 1.45;
+      min-height: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      overflow-y: hidden;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+    body.drawer-open {
+      overflow: hidden;
+      touch-action: none;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+      height: 100%;
+      min-height: 100%;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .mobile-bar {
+      display: none;
+    }
+    .sidebar-backdrop {
+      display: none;
+    }
+    aside {
+      background: var(--sidebar);
+      border-right: 1px solid var(--line);
+      padding: 18px 12px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      overflow: hidden;
+      min-width: 0;
+      min-height: 0;
+    }
+    .aside-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 4px 2px;
+    }
+    aside h1 {
+      font-size: 1.05rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin: 0;
+    }
+    .aside-close {
+      display: none;
+      flex-shrink: 0;
+      width: var(--touch);
+      height: var(--touch);
+      margin: -8px -6px 0 0;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 1.4rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .aside-close:hover { background: color-mix(in srgb, #fff 70%, var(--sidebar)); }
+    aside .aside-sub {
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin: 0 4px 8px;
+    }
+    .index-meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 0 4px 4px;
+      font-family: var(--mono);
+      word-break: break-word;
+    }
+    .sku-list {
+      list-style: none;
+      margin: 0;
+      padding: 0 2px 4px 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .sku-list button {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 10px 12px;
+      min-height: var(--touch);
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.88rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+      line-height: 1.35;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .sku-list button:hover { background: color-mix(in srgb, #fff 70%, var(--sidebar)); }
+    .sku-list button.active {
+      background: #fff;
+      border-color: var(--line);
+      box-shadow: none;
+      font-weight: 600;
+    }
+    .sku-list button.active .sku-id {
+      text-decoration: none !important;
+      -webkit-text-decoration: none !important;
+      text-decoration-line: none !important;
+      background-image: none;
+      box-shadow: none;
+    }
+    .sku-list .sku-id {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      min-width: 0;
+      flex: 1;
+      /* overflow:hidden + tight line-box clipped mono glyphs mid-stroke */
+      overflow: visible;
+      white-space: nowrap;
+      text-decoration: none;
+      -webkit-text-decoration: none;
+      text-decoration-line: none;
+      text-overflow: clip;
+    }
+    .dot {
+      flex-shrink: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #bbb;
+    }
+    .dot.ok { background: var(--ok); }
+    .dot.fail { background: var(--err); }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 20px 64px;
+      width: 100%;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    /* Route views: #progress = landing only; #scrape = scrape/merge tools */
+    body.view-progress .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    body.view-progress aside,
+    body.view-progress .mobile-bar,
+    body.view-progress #scrapeView {
+      display: none !important;
+    }
+    body.view-scrape #progressView {
+      display: none !important;
+    }
+    .app-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 10px;
+      margin: 0 0 18px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: color-mix(in srgb, #fff 70%, var(--sidebar));
+      width: fit-content;
+      max-width: 100%;
+    }
+    .app-nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 0.88rem;
+      font-weight: 650;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .app-nav a:hover {
+      color: var(--ink);
+      background: color-mix(in srgb, #fff 55%, transparent);
+    }
+    .app-nav a.active {
+      background: var(--accent);
+      color: #fff;
+    }
+    h1.page {
+      font-size: 1.35rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin: 0 0 4px;
+      word-break: break-word;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin: 0 0 22px;
+      word-break: break-word;
+    }
+    .sub code {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      word-break: break-all;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      max-width: 100%;
+    }
+    /* Horizontal scroll only where content needs it — never on the brand
+       progress board (.panel.progress-panel), where overflow creates a
+       scrollport that steals clicks from Balmain / Casio / Seiko cards. */
+    .panel:not(.progress-panel) {
+      overflow-x: auto;
+    }
+    form#form {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr 1fr;
+      align-items: end;
+    }
+    label.field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      min-width: 0;
+    }
+    input[type="text"],
+    select#brand {
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 500;
+      font-family: var(--sans);
+      color: var(--ink);
+      line-height: 1.25;
+      padding: 12px 14px;
+      min-height: var(--touch);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background-color: #fafaf8;
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      vertical-align: middle;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+    }
+    select#brand {
+      padding-right: 36px;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%235c5c5c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 12px 8px;
+    }
+    select#brand::-ms-expand {
+      display: none;
+    }
+    input[type="text"]:focus,
+    select#brand:focus {
+      outline: 2px solid color-mix(in srgb, var(--accent) 35%, white);
+      outline-offset: 0;
+      border-color: var(--accent);
+    }
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      accent-color: var(--accent);
+    }
+    .checks {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      font-size: 0.95rem;
+      color: var(--ink);
+    }
+    .checks label {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      font-weight: 500;
+      min-height: var(--touch);
+      padding: 4px 0;
+    }
+    .form-tools {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      align-items: center;
+      padding-top: 4px;
+      border-top: 1px solid var(--line);
+      margin-top: 2px;
+    }
+    button.rules-btn {
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 10px 14px;
+      min-height: var(--touch);
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--accent);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button.rules-btn:hover { background: #f7f6f3; }
+    button.rules-btn[aria-expanded="true"] {
+      background: color-mix(in srgb, var(--accent) 10%, #fff);
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+    }
+    .rules-panel {
+      grid-column: 1 / -1;
+      margin: 0;
+      padding: 12px 14px;
+      background: #f7f6f3;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      color: var(--ink);
+    }
+    .rules-panel h3 {
+      margin: 0 0 8px;
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+    }
+    .rules-panel ul {
+      margin: 0 0 10px;
+      padding-left: 1.2em;
+      color: var(--muted);
+    }
+    .rules-panel li { margin: 0.2em 0; }
+    .rules-panel a {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .rules-panel .rules-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 0.85rem;
+    }
+    button#run, button.refresh {
+      font: inherit;
+      font-weight: 600;
+      padding: 12px 18px;
+      min-height: var(--touch);
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      min-width: 120px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button#run {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+    button#run:hover:not(:disabled),
+    button.refresh:hover:not(:disabled) { background: var(--accent-hover); }
+    button#run:disabled, button.refresh:disabled { opacity: 0.55; cursor: wait; }
+    button.refresh {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--line);
+      min-width: 0;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      align-self: flex-start;
+      margin: 0 4px;
+    }
+    button.refresh:hover:not(:disabled) {
+      background: #fff;
+      color: var(--accent-hover);
+    }
+    .status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: baseline;
+      font-size: 0.95rem;
+    }
+    .badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.02em;
+      max-width: 100%;
+      word-break: break-word;
+    }
+    .badge.ok { background: #e5f3ea; color: var(--ok); }
+    .badge.err { background: #f8e4e4; color: var(--err); }
+    .badge.idle { background: #eeebe5; color: var(--muted); }
+    .badge.fill { background: #e5f3ea; color: var(--ok); }
+    .badge.skip { background: #f3ebe0; color: var(--warn); }
+    .badge.omit { background: #eeebe5; color: var(--muted); }
+    .badge.source-balmainwatches { background: #e8eef8; color: #2a4a7a; }
+    .badge.source-tatacliq { background: #f3ebe0; color: #8a5a12; }
+    .badge.source-other { background: #eeebe5; color: var(--muted); }
+    .badge.near-match {
+      background: #f3ebe0;
+      color: #8a5a12;
+      border: 1px solid #e0c9a0;
+    }
+    #sourceBadge { margin-left: 4px; }
+    #nearMatchBadge { margin-left: 4px; }
+
+    /* Progress landing: Overview (totals + brand cards + brand detail) and
+       a right-side Failed tab. Normal document flow only — no overlays. */
+    .panel.progress-panel {
+      border: 2px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 12%, transparent);
+      background:
+        radial-gradient(ellipse 70% 45% at 100% 0%, #e6efe9 0%, transparent 55%),
+        linear-gradient(180deg, #f7faf8 0%, #fff 48%);
+      overflow: visible;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .landing-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px 20px;
+      margin: 0 0 14px;
+    }
+    .landing-head-copy {
+      min-width: 0;
+      flex: 1 1 220px;
+    }
+    .landing-kicker {
+      margin: 0 0 4px;
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .progress-panel h2 {
+      margin: 0 0 6px;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--accent);
+    }
+    .progress-panel .progress-sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+      max-width: 42rem;
+    }
+    .landing-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: color-mix(in srgb, #fff 70%, var(--sidebar));
+      flex: 0 0 auto;
+      align-self: flex-start;
+    }
+    .landing-tabs button {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ink);
+      border-radius: 7px;
+      padding: 8px 14px;
+      min-height: 36px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .landing-tabs button .n {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      opacity: 0.8;
+      margin-left: 5px;
+    }
+    .landing-tabs button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .landing-tabs button:hover:not(.active) {
+      background: #fff;
+      border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+    }
+    .landing-pane.hidden { display: none; }
+    .progress-totals {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+    .progress-totals .pt {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      font-weight: 600;
+      min-height: 36px;
+      cursor: pointer;
+    }
+    .progress-totals .pt .k {
+      font-family: var(--sans);
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .progress-totals .pt.done { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+    .progress-totals .pt.left { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+    .progress-totals .pt.fail { color: var(--err); border-color: color-mix(in srgb, var(--err) 35%, var(--line)); }
+    .progress-totals .pt:hover {
+      border-color: var(--accent);
+    }
+    .progress-totals .pt.active-filter {
+      box-shadow: inset 0 0 0 1px currentColor;
+    }
+    .landing-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+      gap: 16px 20px;
+      align-items: start;
+    }
+    .landing-brands-col,
+    .landing-detail-col {
+      min-width: 0;
+    }
+    .landing-col-label {
+      margin: 0 0 8px;
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .failed-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 12px;
+      margin: 0 0 10px;
+    }
+    .failed-toolbar .failed-scope {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .failed-toolbar .failed-scope strong {
+      color: var(--ink);
+      font-weight: 650;
+    }
+    .failed-list-wrap .progress-sku-list {
+      max-height: min(520px, 60vh);
+    }
+    .failed-list-wrap .sku-brand {
+      display: inline-block;
+      font-family: var(--sans);
+      font-size: 0.7rem;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    .failed-list-wrap .progress-sku-list button {
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .failed-list-wrap .sku-main {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    /* Brand grid layer — separate from detail; no z-index / isolation. */
+    #brandProgressCards.brand-progress-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+      margin: 0;
+      flex: 0 0 auto;
+      position: static;
+      overflow: visible;
+    }
+    #brandProgressCards .brand-card {
+      appearance: none;
+      -webkit-appearance: none;
+      display: block;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 10px 12px;
+      min-height: var(--touch);
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.82rem;
+      text-align: left;
+      line-height: 1.3;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      overflow: visible;
+    }
+    #brandProgressCards .brand-card:hover {
+      background: #fff;
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+    }
+    #brandProgressCards .brand-card.active {
+      background: #fff;
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent);
+      font-weight: 600;
+    }
+    #brandProgressCards .brand-card .pb-label {
+      display: block;
+      font-weight: 650;
+      margin-bottom: 4px;
+    }
+    #brandProgressCards .brand-card .pb-counts {
+      display: block;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #brandProgressCards .brand-card .pb-counts .c-done { color: var(--ok); }
+    #brandProgressCards .brand-card .pb-counts .c-left { color: var(--warn); }
+    #brandProgressCards .brand-card .pb-counts .c-fail { color: var(--err); }
+    #brandProgressCards .brand-card.unavailable {
+      opacity: 0.55;
+    }
+    /* Detail sits in the right column on desktop; stacked on mobile. */
+    .progress-detail {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 0;
+      position: static;
+      flex: 0 0 auto;
+      clear: both;
+      background: color-mix(in srgb, #fff 88%, var(--sidebar));
+    }
+    .progress-detail.hidden { display: none; }
+    .progress-detail-empty {
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      padding: 18px 14px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      background: transparent;
+    }
+    .progress-detail-empty.hidden { display: none; }
+    .progress-detail-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .progress-detail-head strong {
+      font-size: 0.95rem;
+    }
+    .progress-detail-head .muted {
+      font-size: 0.78rem;
+      font-family: var(--mono);
+    }
+    .progress-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .progress-tabs button {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--ink);
+      border-radius: 6px;
+      padding: 8px 12px;
+      min-height: 36px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 550;
+    }
+    .progress-tabs button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .progress-tabs button .n {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      opacity: 0.85;
+      margin-left: 4px;
+    }
+    .progress-sku-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 280px;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #faf9f6;
+    }
+    .progress-sku-list li {
+      border-bottom: 1px solid var(--line);
+    }
+    .progress-sku-list li:last-child { border-bottom: none; }
+    .progress-sku-list button,
+    .progress-sku-list .progress-sku-row {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: var(--ink);
+      padding: 10px 12px;
+      min-height: 40px;
+      font: inherit;
+      font-size: 0.84rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .progress-sku-list .progress-sku-row {
+      cursor: default;
+      color: var(--muted);
+    }
+    .progress-sku-list button:hover {
+      background: #fff;
+    }
+    .progress-sku-list .sku-id {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+    }
+    .progress-sku-list .sku-meta {
+      font-size: 0.75rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 55%;
+    }
+    .progress-empty {
+      padding: 14px 12px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .muted { color: var(--muted); }
+    .merge-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .merge-actions label {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      min-height: var(--touch);
+      padding: 4px 0;
+    }
+    button.merge-btn {
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 10px 14px;
+      min-height: var(--touch);
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--accent);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button.merge-btn:hover:not(:disabled) { background: #f7f6f3; }
+    button.merge-btn:disabled { opacity: 0.55; cursor: wait; }
+    .table-scroll {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+      margin: 0 -2px;
+      padding: 0 2px;
+    }
+    table.merge {
+      width: 100%;
+      min-width: 520px;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    table.merge th,
+    table.merge td {
+      text-align: left;
+      vertical-align: top;
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--line);
+      word-break: break-word;
+    }
+    table.merge th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .policy-box {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      background: #f7f6f3;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      word-break: break-word;
+    }
+    h2 {
+      font-size: 1.05rem;
+      margin: 0 0 10px;
+      letter-spacing: -0.01em;
+    }
+    .title {
+      font-size: 1.2rem;
+      font-weight: 650;
+      margin: 0 0 6px;
+      word-break: break-word;
+    }
+    .meta { word-break: break-word; }
+    .meta a { color: var(--accent); }
+    table.specs {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    table.specs th,
+    table.specs td {
+      text-align: left;
+      vertical-align: top;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      word-break: break-word;
+    }
+    table.specs th {
+      width: 34%;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    .gallery a {
+      display: block;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #f7f6f3;
+      aspect-ratio: 1;
+      min-width: 0;
+    }
+    .gallery img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    details.raw {
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      margin-top: 4px;
+    }
+    details.raw summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 0.9rem;
+      min-height: var(--touch);
+      display: flex;
+      align-items: center;
+    }
+    pre {
+      margin: 10px 0 0;
+      padding: 12px;
+      overflow: auto;
+      max-height: 420px;
+      max-width: 100%;
+      background: #1e1f1c;
+      color: #e8e6e1;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      line-height: 1.4;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .hidden { display: none !important; }
+    .empty-index {
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 8px 10px;
+    }
+
+    @media (max-width: 800px) {
+      html, body {
+        height: auto;
+        min-height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      body.drawer-open {
+        overflow: hidden;
+        height: 100%;
+        touch-action: none;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+        display: block;
+        height: auto;
+        overflow: visible;
+      }
+      .mobile-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        padding: 10px 12px;
+        background: color-mix(in srgb, var(--sidebar) 92%, #fff);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(8px);
+      }
+      .mobile-bar .brand {
+        font-weight: 650;
+        font-size: 0.95rem;
+        letter-spacing: -0.02em;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mobile-bar .sku-count {
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--muted);
+        flex-shrink: 0;
+      }
+      button.menu-toggle {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: var(--touch);
+        min-width: var(--touch);
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--accent);
+        font: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: rgba(26, 26, 26, 0.4);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      body.drawer-open .sidebar-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      aside {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 60;
+        width: min(320px, 88vw);
+        max-width: 100%;
+        height: 100vh;
+        height: 100dvh;
+        max-height: none;
+        border-right: 1px solid var(--line);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+        transform: translateX(-105%);
+        transition: transform 0.22s ease;
+        padding-top: max(18px, env(safe-area-inset-top));
+        padding-bottom: max(28px, env(safe-area-inset-bottom));
+      }
+      body.drawer-open aside {
+        transform: translateX(0);
+      }
+      .aside-close { display: inline-flex; align-items: center; justify-content: center; }
+      main {
+        padding: 18px 14px 48px;
+        max-width: 100%;
+        height: auto;
+        overflow: visible;
+      }
+      h1.page { font-size: 1.2rem; }
+      .sub { font-size: 0.88rem; margin-bottom: 16px; }
+      .panel {
+        padding: 14px;
+        border-radius: 6px;
+      }
+      .landing-head {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .landing-tabs {
+        width: 100%;
+        justify-content: stretch;
+      }
+      .landing-tabs button {
+        flex: 1 1 auto;
+        text-align: center;
+      }
+      .landing-split {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      .progress-panel h2 { font-size: 1.2rem; }
+      .failed-list-wrap .progress-sku-list {
+        max-height: min(420px, 55vh);
+      }
+      form#form { grid-template-columns: 1fr; }
+      button#run { width: 100%; }
+      button.refresh { margin: 0; align-self: stretch; width: calc(100% - 8px); }
+      table.specs th { width: 42%; font-size: 0.75rem; padding: 8px 6px; }
+      table.specs td { padding: 8px 6px; font-size: 0.88rem; }
+      .gallery {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 10px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        touch-action: pan-x;
+        scroll-snap-type: x proximity;
+        padding-bottom: 4px;
+        margin: 0 -4px;
+        padding-left: 4px;
+        padding-right: 4px;
+      }
+      .gallery a {
+        flex: 0 0 140px;
+        width: 140px;
+        scroll-snap-align: start;
+      }
+      .form-tools { gap: 8px; }
+      button.rules-btn { flex: 1 1 auto; }
+      .merge-actions { gap: 4px 12px; }
+      button.merge-btn { width: 100%; }
+      pre { font-size: 0.7rem; max-height: 280px; }
+    }
+
+    @media (max-width: 420px) {
+      .gallery a {
+        flex-basis: 120px;
+        width: 120px;
+      }
+      table.merge { min-width: 480px; font-size: 0.82rem; }
+    }
+  </style>
+</head>
+<body class="view-progress">
+  <div class="mobile-bar">
+    <button type="button" class="menu-toggle" id="menuToggle" aria-expanded="false" aria-controls="batchAside">
+      SKUs
+    </button>
+      <span class="brand">Samay preview</span>
+    <span class="sku-count" id="mobileSkuCount"></span>
+  </div>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+  <div class="layout">
+    <aside id="batchAside" aria-label="Batch results">
+      <div class="aside-head">
+        <h1>Batch results</h1>
+        <button type="button" class="aside-close" id="asideClose" aria-label="Close SKU list">×</button>
+      </div>
+      <p class="aside-sub">Click a SKU to load saved scrape (no re-fetch).</p>
+      <p class="index-meta" id="indexMeta">loading…</p>
+      <button type="button" class="refresh" id="refreshIndex">Refresh list</button>
+      <ul class="sku-list" id="skuList"></ul>
+    </aside>
+
+    <main>
+      <nav class="app-nav" id="appNav" aria-label="App views">
+        <a href="#progress" id="navLanding" data-route="progress">Brand progress</a>
+        <a href="#scrape" id="navScrape" data-route="scrape">Scraper</a>
+      </nav>
+
+      <div id="progressView">
+        <h1 class="page">Samay · brand progress</h1>
+        <p class="sub">
+          Reviewer landing for <code>scripts/enrichment</code> —
+          Overview and Failed only.
+          Open the <a href="#scrape" id="jumpScrapeTop" style="color:var(--accent);font-weight:650;text-decoration:none;">Scraper</a>
+          for brand/SKU lookup, batch results, and merge preview.
+        </p>
+
+        <section class="panel progress-panel" id="progressPanel" aria-label="Brand progress">
+          <div class="landing-head">
+            <div class="landing-head-copy">
+              <p class="landing-kicker">Samay test</p>
+              <h2>Brand progress</h2>
+              <p class="progress-sub">
+                Done / Left / Failed vs input CSVs + batch outputs.
+                <a href="#progress" id="progressDeepLink" style="color:var(--accent);font-weight:600;text-decoration:none;">#progress</a>
+                · <button type="button" class="rules-btn" id="refreshProgress" style="margin-left:4px;">Refresh</button>
+              </p>
+            </div>
+            <div class="landing-tabs" id="landingTabs" role="tablist" aria-label="Progress views">
+              <button type="button" role="tab" id="landingTabOverview" data-pane="overview" aria-selected="true" class="active">
+                Overview
+              </button>
+              <button type="button" role="tab" id="landingTabFailed" data-pane="failed" aria-selected="false">
+                Failed<span class="n" id="landingFailedCount">0</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="progress-totals" id="progressTotals" aria-live="polite"></div>
+          <div class="landing-split">
+            <div class="landing-brands-col">
+              <p class="landing-col-label">Brands</p>
+              <div
+                id="brandProgressCards"
+                class="brand-progress-cards"
+                aria-label="Brands"
+              >loading…</div>
+            </div>
+            <div class="landing-detail-col">
+              <div class="landing-pane" id="landingOverview" data-pane="overview" role="tabpanel" aria-labelledby="landingTabOverview">
+                <p class="landing-col-label">Selected brand</p>
+                <div class="progress-detail-empty" id="progressDetailEmpty">
+                  Select a brand to see Done / Left / Failed SKUs.
+                </div>
+                <div class="progress-detail hidden" id="progressDetail">
+                  <div class="progress-detail-head">
+                    <strong id="progressBrandLabel"></strong>
+                    <span class="muted" id="progressBrandMeta"></span>
+                  </div>
+                  <div class="progress-tabs" id="progressTabs" role="tablist" aria-label="Buckets"></div>
+                  <ul class="progress-sku-list" id="progressSkuList"></ul>
+                </div>
+              </div>
+              <div class="landing-pane hidden" id="landingFailed" data-pane="failed" role="tabpanel" aria-labelledby="landingTabFailed">
+                <div class="failed-toolbar">
+                  <p class="failed-scope" id="failedScopeLabel">All brands</p>
+                  <button type="button" class="rules-btn" id="failedShowAll" hidden>Show all brands</button>
+                </div>
+                <div class="failed-list-wrap">
+                  <ul class="progress-sku-list" id="aggregateFailedList" aria-label="Failed products"></ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div id="scrapeView">
+        <h1 class="page">Samay · scrape &amp; merge</h1>
+        <p class="sub">
+          Single-SKU lookup, batch results, and merge preview.
+          Back to <a href="#progress" id="jumpProgressTop" style="color:var(--accent);font-weight:650;text-decoration:none;">Brand progress</a>
+          or <a href="#progress/failed" id="jumpFailedTop" style="color:var(--accent);font-weight:650;text-decoration:none;">Failed products</a>.
+        </p>
+
+        <section class="panel">
+          <form id="form">
+            <label class="field">
+              Brand
+              <select id="brand">
+                <option value="tissot" selected>Tissot</option>
+                <option value="fossil">Fossil</option>
+                <option value="casio">Casio</option>
+                <option value="seiko">Seiko</option>
+                <option value="longines">Longines</option>
+                <option value="rado">Rado</option>
+                <option value="emporio-armani">Emporio Armani</option>
+                <option value="armani-exchange">Armani Exchange</option>
+                <option value="earnshaw">Earnshaw</option>
+                <option value="alexandre-christie">Alexandre Christie</option>
+                <option value="michael-kors">Michael Kors</option>
+                <option value="phillip-plein">Phillip Plein</option>
+                <option value="timex">Timex</option>
+                <option value="titan">Titan</option>
+                <option value="balmain">Balmain</option>
+              </select>
+            </label>
+            <label class="field">
+              SKU
+              <input id="sku" type="text" value="T1564103337100" autocomplete="off" spellcheck="false" />
+            </label>
+            <button id="run" type="submit">Run scrape</button>
+            <div class="checks">
+              <label><input id="downloadImages" type="checkbox" checked /> Download images</label>
+              <label><input id="useFixture" type="checkbox" /> Use HTML fixture (if live fails / offline)</label>
+            </div>
+            <div class="form-tools">
+              <button type="button" class="rules-btn" id="rulesToggle" aria-expanded="false" aria-controls="rulesPanel">
+                Merge rules
+              </button>
+              <a class="muted" href="#scrape" id="jumpMerge" style="font-size:0.85rem;font-weight:600;color:var(--accent);text-decoration:none;">
+                Jump to merge preview →
+              </a>
+            </div>
+            <div class="rules-panel hidden" id="rulesPanel" role="region" aria-label="Merge rules">
+              <h3>Staff wins · fill empty only</h3>
+              <p id="rulesSummary" class="muted" style="margin:0 0 10px;">
+                Only <strong>fill</strong> empty/null/blank IMS fields. Non-empty title, description, specs, prices, and images are <strong>skip</strong>ped unless force overwrite is on.
+              </p>
+              <ul id="rulesList">
+                <li>Empty = null, undefined, blank, or whitespace-only.</li>
+                <li>Images: fill only when the existing product has no usable gallery.</li>
+                <li>New SKUs: all incoming fields apply (create path).</li>
+                <li>Gender &amp; other enums: shared normalizer maps scrape wording → IMS options; unknown → blank (never invent).</li>
+                <li>Same policy for Balmain and Titan.</li>
+                <li><strong>Scrape ≠ approve</strong> — preview scrape / IMS Scan never sets <code>isPublished</code>.</li>
+                <li><strong>Approved enrichment ⇒ isPublished true immediately (sold-out allowed).</strong> Approve &amp; go live or apply-*-batch (approved brand / <code>--publish</code>) publishes when title + ≥1 image exist; inventory may be 0.</li>
+              </ul>
+              <div class="rules-meta">
+                <a href="/api/merge-policy" target="_blank" rel="noopener" id="rulesApiLink">GET /api/merge-policy</a>
+                <span class="muted">JSON policy document</span>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel status" id="statusPanel">
+          <span class="badge idle" id="badge">idle</span>
+          <span class="badge source-other hidden" id="sourceBadge"></span>
+          <span class="badge near-match hidden" id="nearMatchBadge" title="Scraped style differs from IMS SKU"></span>
+          <span class="muted" id="timing"></span>
+          <span class="muted" id="mode"></span>
+        </section>
+
+        <section class="panel hidden" id="resultPanel">
+          <p class="title" id="title"></p>
+          <p class="meta muted" id="meta"></p>
+          <p id="price"></p>
+          <p class="muted" id="desc"></p>
+        </section>
+
+        <section class="panel hidden" id="specsPanel">
+          <h2>Specs</h2>
+          <table class="specs"><tbody id="specsBody"></tbody></table>
+        </section>
+
+        <section class="panel hidden" id="galleryPanel">
+          <h2>Images</h2>
+          <div class="gallery" id="gallery"></div>
+        </section>
+
+        <section class="panel" id="mergePanel">
+          <h2>Merge preview · rules</h2>
+          <p class="policy-box" id="mergePolicy">
+            Default: only <strong>fill</strong> empty/null/blank IMS fields. Non-empty title, description, specs, prices, and images are <strong>skip</strong>ped unless force overwrite is on. Gender/enums use shared mapping (unknown → blank).
+            <br /><br />
+            <strong>Approved enrichment ⇒ isPublished true immediately (sold-out allowed).</strong>
+            Scrape alone never publishes; approve / approved-batch apply does (title + ≥1 image; inventory 0 OK).
+          </p>
+          <div class="merge-actions">
+            <label title="Uses a brand-matched demo staff product when IMS is unavailable. Never a real IMS row for this SKU.">
+              <input id="useSampleExisting" type="checkbox" checked /> Demo sample existing (not this SKU)
+            </label>
+            <label title="Preferred: fetch the real IMS product by the selected SKU from :5055">
+              <input id="fetchIms" type="checkbox" /> Try live IMS (:5055)
+            </label>
+            <label><input id="forceOverwrite" type="checkbox" /> Force overwrite</label>
+            <button type="button" class="merge-btn" id="runMerge">Compare merge</button>
+          </div>
+          <p class="muted" id="mergeMeta"></p>
+          <div class="table-scroll">
+            <table class="merge hidden" id="mergeTable">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Action</th>
+                  <th>Reason</th>
+                  <th>Existing</th>
+                  <th>Incoming</th>
+                </tr>
+              </thead>
+              <tbody id="mergeBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="rawPanel">
+          <details class="raw">
+            <summary>Raw JSON</summary>
+            <pre id="raw"></pre>
+          </details>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script>
+    const form = document.getElementById("form");
+    const runBtn = document.getElementById("run");
+    const badge = document.getElementById("badge");
+    const nearMatchBadge = document.getElementById("nearMatchBadge");
+    const sourceBadge = document.getElementById("sourceBadge");
+    const timing = document.getElementById("timing");
+    const mode = document.getElementById("mode");
+    const skuList = document.getElementById("skuList");
+    const indexMeta = document.getElementById("indexMeta");
+    const menuToggle = document.getElementById("menuToggle");
+    const asideClose = document.getElementById("asideClose");
+    const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+    const mobileSkuCount = document.getElementById("mobileSkuCount");
+    let activeSku = null;
+    let lastProduct = null;
+    let lastProductError = null;
+
+    let drawerScrollY = 0;
+    function setDrawerOpen(open) {
+      const isMobile = window.matchMedia("(max-width: 800px)").matches;
+      if (open && isMobile) {
+        drawerScrollY = window.scrollY || window.pageYOffset || 0;
+        document.body.style.top = "-" + drawerScrollY + "px";
+        document.body.style.position = "fixed";
+        document.body.style.left = "0";
+        document.body.style.right = "0";
+        document.body.style.width = "100%";
+      } else if (!open && document.body.style.position === "fixed") {
+        const y = drawerScrollY;
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.left = "";
+        document.body.style.right = "";
+        document.body.style.width = "";
+        window.scrollTo(0, y);
+      }
+      document.body.classList.toggle("drawer-open", open);
+      menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      sidebarBackdrop.setAttribute("aria-hidden", open ? "false" : "true");
+      // CSS body.drawer-open owns overflow lock — clear any leftover inline overflow
+      if (!open) document.body.style.overflow = "";
+    }
+
+    function closeDrawer() {
+      setDrawerOpen(false);
+    }
+
+    menuToggle.addEventListener("click", () => {
+      setDrawerOpen(!document.body.classList.contains("drawer-open"));
+    });
+    asideClose.addEventListener("click", closeDrawer);
+    sidebarBackdrop.addEventListener("click", closeDrawer);
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeDrawer();
+    });
+    window.addEventListener("resize", () => {
+      if (window.matchMedia("(min-width: 801px)").matches) closeDrawer();
+    });
+
+    const SPEC_KEYS = [
+      ["officialSku", "Official SKU"],
+      ["gender", "Gender"],
+      ["caseMaterial", "Case"],
+      ["caseShape", "Case shape"],
+      ["caseSize", "Case size"],
+      ["dialColor", "Dial color"],
+      ["waterResistance", "Water resistance"],
+      ["movement", "Movement"],
+      ["strapMaterial", "Strap material"],
+      ["strapColor", "Strap color"],
+      ["warrantyPeriod", "Warranty"],
+    ];
+
+    function setBadge(kind, text) {
+      badge.className = "badge " + kind;
+      badge.textContent = text;
+    }
+
+    function setNearMatchBadge(product) {
+      if (!nearMatchBadge) return;
+      const isNear =
+        product &&
+        (product.nearMatch === true ||
+          product.typoFrom ||
+          (product.matchedStyle &&
+            product.imsSku &&
+            String(product.matchedStyle).toUpperCase() !==
+              String(product.imsSku)
+                .toUpperCase()
+                .replace(/^NU/, "")));
+      if (!isNear) {
+        nearMatchBadge.className = "badge near-match hidden";
+        nearMatchBadge.textContent = "";
+        nearMatchBadge.title = "";
+        return;
+      }
+      const matched =
+        product.matchedStyle || product.styleCode || product.sku || "";
+      const from =
+        product.imsSku || product.typoFrom || "";
+      nearMatchBadge.className = "badge near-match";
+      nearMatchBadge.textContent = matched
+        ? "near match → " + matched
+        : "near match";
+      nearMatchBadge.title = from
+        ? "IMS " + from + " matched official style " + matched
+        : "Scraped style differs from requested IMS SKU — confirm before import";
+    }
+
+    function setSourceBadge(source) {
+      if (!source) {
+        sourceBadge.className = "badge source-other hidden";
+        sourceBadge.textContent = "";
+        return;
+      }
+      const known =
+        source === "balmainwatches" || source === "tatacliq"
+          ? source
+          : "other";
+      sourceBadge.className = "badge source-" + known;
+      sourceBadge.textContent =
+        source === "tatacliq"
+          ? "source: tatacliq"
+          : source === "balmainwatches"
+            ? "source: balmainwatches"
+            : "source: " + source;
+    }
+
+    function show(el, on) {
+      el.classList.toggle("hidden", !on);
+    }
+
+    function esc(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function setActiveSku(sku) {
+      activeSku = sku;
+      for (const btn of skuList.querySelectorAll("button")) {
+        btn.classList.toggle("active", btn.dataset.sku === sku);
+      }
+      if (sku) document.getElementById("sku").value = sku;
+    }
+
+    function clearMergePreview(message) {
+      const meta = document.getElementById("mergeMeta");
+      const table = document.getElementById("mergeTable");
+      const tbody = document.getElementById("mergeBody");
+      meta.textContent = message || "";
+      tbody.innerHTML = "";
+      table.classList.add("hidden");
+    }
+
+    function renderMergePreview(data) {
+      const meta = document.getElementById("mergeMeta");
+      const table = document.getElementById("mergeTable");
+      const tbody = document.getElementById("mergeBody");
+      const policy = document.getElementById("mergePolicy");
+
+      if (!data || !data.ok) {
+        clearMergePreview((data && data.error) || "Merge preview failed");
+        return;
+      }
+
+      if (data.preview && data.preview.policy) {
+        policy.textContent = data.preview.policy.summary;
+      }
+
+      const bits = [];
+      bits.push("existing: " + (data.existingSource || "none"));
+      if (data.demoSample || (data.existing && data.existing.demoSample)) {
+        bits.push("⚠ demo only — not the real IMS product for this SKU");
+      }
+      if (data.existing && data.existing.brand) {
+        bits.push("existing brand " + data.existing.brand);
+      }
+      if (data.preview) {
+        bits.push("fill " + (data.preview.fill || []).length);
+        bits.push("skip " + (data.preview.skip || []).length);
+        if (data.preview.isNew) bits.push("new SKU");
+        if (data.preview.forceOverwrite) bits.push("FORCE OVERWRITE");
+      }
+      if (data.imsNote) bits.push(data.imsNote);
+      meta.textContent = bits.join(" · ");
+
+      tbody.innerHTML = "";
+      const decisions = (data.preview && data.preview.decisions) || [];
+      for (const d of decisions) {
+        if (d.action === "omit") continue;
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          "<td><code>" + esc(d.field) + "</code></td>" +
+          '<td><span class="badge ' + esc(d.action) + '">' + esc(d.action) + "</span></td>" +
+          "<td>" + esc(d.reason || "") + "</td>" +
+          "<td class=\"muted\">" + esc(d.existing == null ? "—" : d.existing) + "</td>" +
+          "<td>" + esc(d.incoming == null ? "—" : d.incoming) + "</td>";
+        tbody.appendChild(tr);
+      }
+      table.classList.toggle("hidden", tbody.children.length === 0);
+    }
+
+    async function runMergePreview() {
+      const btn = document.getElementById("runMerge");
+      btn.disabled = true;
+      document.getElementById("mergeMeta").textContent = "comparing…";
+      try {
+        const sku = activeSku || document.getElementById("sku").value.trim();
+        if (
+          !lastProduct ||
+          (lastProduct.status && String(lastProduct.status).toLowerCase() !== "ok")
+        ) {
+          clearMergePreview(
+            "No incoming scrape for " +
+              (sku || "SKU") +
+              (lastProductError ? " — " + lastProductError : " — failed/empty") +
+              ". Incoming cleared (will not reuse another SKU)."
+          );
+          return;
+        }
+        if (sku && lastProduct.sku) {
+          const reqUp = String(sku).toUpperCase();
+          const scrapedUp = String(lastProduct.sku).toUpperCase();
+          let same = reqUp === scrapedUp;
+          if (!same) {
+            const keys = new Set(
+              [
+                lastProduct.sku,
+                lastProduct.styleCode,
+                lastProduct.matchedStyle,
+                lastProduct.imsSku,
+                lastProduct.typoFrom,
+                lastProduct.officialSku,
+                lastProduct.sitePid,
+              ]
+                .concat(Array.isArray(lastProduct.imsSkuAliases) ? lastProduct.imsSkuAliases : [])
+                .filter(Boolean)
+                .map((k) => String(k).toUpperCase().replace(/[.\-_\s]/g, ""))
+            );
+            const reqCompact = reqUp.replace(/[.\-_\s]/g, "");
+            const reqBare = reqCompact.replace(/^NU/, "");
+            same =
+              keys.has(reqCompact) ||
+              keys.has(reqBare) ||
+              keys.has("NU" + reqBare) ||
+              [...keys].some((k) => k.replace(/^NU/, "") === reqBare);
+          }
+          if (!same) {
+            clearMergePreview(
+              "Incoming SKU mismatch (selected " +
+                sku +
+                ", loaded " +
+                lastProduct.sku +
+                ") — cleared."
+            );
+            return;
+          }
+        }
+        const payload = {
+          brand: document.getElementById("brand").value,
+          sku,
+          scraped: lastProduct,
+          useSampleExisting: document.getElementById("useSampleExisting").checked,
+          fetchIms: document.getElementById("fetchIms").checked,
+          forceOverwrite: document.getElementById("forceOverwrite").checked,
+        };
+        // Prefer live IMS when checked; sample is last-resort fallback on the server
+        const res = await fetch("/api/merge-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        renderMergePreview(data);
+      } catch (err) {
+        clearMergePreview(err.message || String(err));
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderProductView(data, opts = {}) {
+      const p = data.product || {};
+      const ok = data.ok && p.status === "ok";
+      // Only keep successful scrapes as merge incoming — never leak a prior SKU
+      lastProduct = ok ? p : null;
+      lastProductError = ok
+        ? null
+        : data.error || p.reason || p.status || "Scrape failed";
+      const fromSaved = Boolean(opts.fromSaved);
+
+      setBadge(ok ? "ok" : "err", ok ? "ok" : (p.status || "error"));
+      setSourceBadge(ok ? p.source || null : null);
+      setNearMatchBadge(ok ? p : null);
+      timing.textContent =
+        data.durationMs != null
+          ? data.durationMs + " ms"
+          : fromSaved
+            ? "saved result"
+            : "";
+      mode.textContent = fromSaved
+        ? "index: " + (data.source || data.outDir || "batch")
+        : p.fetchMode
+          ? "fetch: " + p.fetchMode
+          : (data.error || p.reason || "");
+
+      document.getElementById("raw").textContent = JSON.stringify(data, null, 2);
+      show(document.getElementById("rawPanel"), true);
+
+      if (!ok) {
+        document.getElementById("title").textContent = p.sku || opts.sku || "";
+        document.getElementById("meta").textContent = data.error || p.reason || "Scrape failed";
+        document.getElementById("price").textContent = "";
+        document.getElementById("desc").textContent = "";
+        show(document.getElementById("resultPanel"), true);
+        show(document.getElementById("specsPanel"), false);
+        show(document.getElementById("galleryPanel"), false);
+        clearMergePreview(
+          "No incoming scrape for " +
+            (p.sku || opts.sku || "SKU") +
+            " — " +
+            (lastProductError || "failed") +
+            ". Incoming cleared (will not reuse another SKU)."
+        );
+        return;
+      }
+
+      document.getElementById("title").textContent = p.title || p.sku;
+      const bits = [];
+      if (p.sourceUrl) {
+        bits.push('<a href="' + esc(p.sourceUrl) + '" target="_blank" rel="noopener">source PDP</a>');
+      }
+      if (data.outDir) bits.push("out: " + esc(data.outDir));
+      if (data.source) bits.push("index: " + esc(data.source));
+      document.getElementById("meta").innerHTML = bits.join(" · ");
+
+      const priceEl = document.getElementById("price");
+      if (data.priceNote) {
+        priceEl.innerHTML = "<strong>Price:</strong> " + esc(data.priceNote);
+      } else if (p.priceSource && p.priceSource.label) {
+        const cur = (p.priceSource.currency || "").toUpperCase();
+        const note =
+          p.source === "titan"
+            ? " (INR on titan.co.in — not written to IMS by default)"
+            : cur === "INR"
+              ? " (INR on Tata Cliq — not written to IMS by default)"
+              : " (CHF on brand site — not IMS INR)";
+        priceEl.innerHTML =
+          "<strong>Price:</strong> " +
+          esc(p.priceSource.label) +
+          ' <span class="muted">' +
+          note +
+          "</span>";
+      } else {
+        priceEl.textContent = "Price: (none on page)";
+      }
+      document.getElementById("desc").textContent = p.description || "";
+      show(document.getElementById("resultPanel"), true);
+
+      const tbody = document.getElementById("specsBody");
+      tbody.innerHTML = "";
+      for (const [key, label] of SPEC_KEYS) {
+        const val = p[key];
+        if (val == null || val === "") continue;
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<th>" + esc(label) + "</th><td>" + esc(val) + "</td>";
+        tbody.appendChild(tr);
+      }
+      if (p.extras) {
+        for (const [k, v] of Object.entries(p.extras)) {
+          if (v == null || v === "") continue;
+          const tr = document.createElement("tr");
+          tr.innerHTML = "<th>" + esc(k) + "</th><td>" + esc(v) + "</td>";
+          tbody.appendChild(tr);
+        }
+      }
+      show(document.getElementById("specsPanel"), tbody.children.length > 0);
+
+      const gallery = document.getElementById("gallery");
+      gallery.innerHTML = "";
+      const urls = data.imageUrls || data.previewImages || p.images || [];
+      for (const url of urls) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = p.sku || "product";
+        img.loading = "lazy";
+        a.appendChild(img);
+        gallery.appendChild(a);
+      }
+      show(document.getElementById("galleryPanel"), urls.length > 0);
+
+      if (ok) runMergePreview();
+    }
+
+    function brandKeyForRow(row) {
+      const b = String(row.brand || "").toLowerCase();
+      if (b) return b;
+      const src = String(row.source || "").toLowerCase();
+      if (src.includes("timex")) return "timex";
+      if (src.includes("tissot")) return "tissot";
+      if (src.includes("fossil")) return "fossil";
+      if (src.includes("casio")) return "casio";
+      if (src.includes("seiko")) return "seiko";
+      if (src.includes("longines")) return "longines";
+      if (src.includes("rado")) return "rado";
+      if (src.includes("emporio")) return "emporio-armani";
+      if (src.includes("armani-exchange") || src.includes("armani exchange")) {
+        return "armani-exchange";
+      }
+      if (src.includes("earnshaw")) return "earnshaw";
+      if (src.includes("alexandre-christie") || src.includes("alexandre christie")) {
+        return "alexandre-christie";
+      }
+      if (src.includes("michael-kors") || src.includes("michael kors") || src.includes("michaelkors")) {
+        return "michael-kors";
+      }
+      if (
+        src.includes("phillip-plein") ||
+        src.includes("philipp-plein") ||
+        src.includes("phillip plein") ||
+        src.includes("philipp plein")
+      ) {
+        return "phillip-plein";
+      }
+      if (src.includes("titan")) return "titan";
+      if (src.includes("balmain")) return "balmain";
+      const sku = String(row.sku || "");
+      if (/^TWEG|^TW2|^TW6|^TWFG/i.test(sku)) return "timex";
+      if (/^T\d{10,}/i.test(sku)) return "tissot";
+      if (/^ES-?\d{4}-?\d{2}$/i.test(sku) || /^ES\d{6}$/i.test(sku)) {
+        return "earnshaw";
+      }
+      if (/^MK\d{3,}/i.test(sku)) return "michael-kors";
+      if (/^PW[A-Z0-9]/i.test(sku)) return "phillip-plein";
+      if (/^(FS|ES|ME|BQ|CE)\d/i.test(sku)) return "fossil";
+      if (/^(D|G|A|I)\d{2,}/i.test(sku)) return "casio";
+      if (/^(HB|SPB|SRPK|SSH|SNK)/i.test(sku)) return "seiko";
+      if (/^L\d/i.test(sku)) return "longines";
+      if (/^R\d{6,}/i.test(sku)) return "rado";
+      if (/^AX\d{4,}/i.test(sku)) return "armani-exchange";
+      if (/^AR\d{4,}/i.test(sku)) return "emporio-armani";
+      if (/^2B\d/i.test(sku) || /^[0-9][A-Z0-9]{8,}BROBO$/i.test(sku)) {
+        return "alexandre-christie";
+      }
+      if (/^NU|^NT|\d+[A-Z]{2}\d/i.test(sku)) return "titan";
+      if (/^B\d/i.test(sku)) return "balmain";
+      return "";
+    }
+
+    let progressData = null;
+    let progressBrandId = null;
+    let progressBucket = "left";
+    /** Landing pane: "overview" | "failed" */
+    let landingPane = "overview";
+
+    function pickDefaultProgressBrand(brands) {
+      const list = Array.isArray(brands) ? brands : [];
+      const avail = list.filter((b) => b && b.available !== false);
+      const pool = avail.length ? avail : list;
+      return (
+        pool.find((b) => b.leftCount > 0) ||
+        pool.find((b) => b.failedCount > 0) ||
+        pool.find((b) => b.doneCount > 0) ||
+        pool[0] ||
+        null
+      );
+    }
+
+    function defaultBucketForBrand(brand) {
+      if (!brand) return "left";
+      if (brand.leftCount > 0) return "left";
+      if (brand.failedCount > 0) return "failed";
+      return "done";
+    }
+
+    function findProgressBrand(id) {
+      const key = String(id || "").trim().toLowerCase();
+      if (!key) return null;
+      return ((progressData && progressData.brands) || []).find(
+        (b) => String(b.id || "").toLowerCase() === key
+      ) || null;
+    }
+
+    function aggregateFailCount() {
+      const brands = (progressData && progressData.brands) || [];
+      let fail = 0;
+      for (const b of brands) fail += Number(b.failedCount) || 0;
+      return fail;
+    }
+
+    /**
+     * App routes:
+     *   #progress[/…]  — landing only (brand progress + Overview | Failed)
+     *   #scrape        — brand/SKU form, batch sidebar, merge preview
+     * Empty / unknown  — treat as landing (#progress).
+     */
+    function readAppRoute() {
+      const raw = String(location.hash || "").replace(/^#/, "").trim();
+      if (!raw || raw === "progress" || raw.startsWith("progress/")) {
+        return "progress";
+      }
+      if (
+        raw === "scrape" ||
+        raw === "review" ||
+        raw === "merge" ||
+        raw === "mergePanel" ||
+        raw.startsWith("scrape/")
+      ) {
+        return "scrape";
+      }
+      return "progress";
+    }
+
+    function applyAppRoute() {
+      const route = readAppRoute();
+      const isProgress = route === "progress";
+      document.body.classList.toggle("view-progress", isProgress);
+      document.body.classList.toggle("view-scrape", !isProgress);
+      const navLanding = document.getElementById("navLanding");
+      const navScrape = document.getElementById("navScrape");
+      if (navLanding) navLanding.classList.toggle("active", isProgress);
+      if (navScrape) navScrape.classList.toggle("active", !isProgress);
+      if (!isProgress) closeDrawer();
+      return route;
+    }
+
+    /**
+     * Read #progress[/brand[/bucket]] or #progress/failed without mutating
+     * selection. Bare #progress/failed → aggregate Failed landing pane.
+     */
+    function readProgressHash() {
+      const raw = String(location.hash || "").replace(/^#/, "");
+      if (!raw.startsWith("progress")) {
+        return {
+          brandId: null,
+          bucket: null,
+          isProgress: false,
+          pane: null,
+        };
+      }
+      const parts = raw.split("/");
+      const seg1 = parts[1]
+        ? decodeURIComponent(parts[1]).trim().toLowerCase()
+        : null;
+      const seg2 =
+        parts[2] && ["done", "left", "failed"].includes(parts[2])
+          ? parts[2]
+          : null;
+
+      // #progress/failed — landing Failed tab (all brands)
+      if (seg1 === "failed" && !seg2) {
+        return {
+          brandId: null,
+          bucket: "failed",
+          isProgress: true,
+          pane: "failed",
+        };
+      }
+
+      const brandId = seg1;
+      const bucket = seg2;
+      const pane = bucket === "failed" ? "failed" : "overview";
+      return { brandId, bucket, isProgress: true, pane };
+    }
+
+    function setLandingPane(pane, opts) {
+      const next = pane === "failed" ? "failed" : "overview";
+      landingPane = next;
+      const overview = document.getElementById("landingOverview");
+      const failed = document.getElementById("landingFailed");
+      const tabOverview = document.getElementById("landingTabOverview");
+      const tabFailed = document.getElementById("landingTabFailed");
+      if (overview) overview.classList.toggle("hidden", next !== "overview");
+      if (failed) failed.classList.toggle("hidden", next !== "failed");
+      if (tabOverview) {
+        tabOverview.classList.toggle("active", next === "overview");
+        tabOverview.setAttribute(
+          "aria-selected",
+          next === "overview" ? "true" : "false"
+        );
+      }
+      if (tabFailed) {
+        tabFailed.classList.toggle("active", next === "failed");
+        tabFailed.setAttribute(
+          "aria-selected",
+          next === "failed" ? "true" : "false"
+        );
+      }
+      if (next === "failed") {
+        if (opts && opts.bucket === "failed") progressBucket = "failed";
+        renderAggregateFailed();
+      }
+      if (!opts || opts.syncHash !== false) syncProgressHash();
+    }
+
+    function selectProgressBrand(brand, bucket) {
+      if (!brand) return;
+      progressBrandId = brand.id;
+      if (bucket && ["done", "left", "failed"].includes(bucket)) {
+        progressBucket = bucket;
+      } else {
+        progressBucket = defaultBucketForBrand(brand);
+      }
+      if (progressBucket === "failed") {
+        setLandingPane("failed", { syncHash: false });
+      } else {
+        setLandingPane("overview", { syncHash: false });
+      }
+      renderProgressBrands();
+      renderProgressDetail();
+      renderAggregateFailed();
+    }
+
+    function renderProgressTotals() {
+      const host = document.getElementById("progressTotals");
+      if (!host) return;
+      const brands = (progressData && progressData.brands) || [];
+      let done = 0;
+      let left = 0;
+      let fail = 0;
+      for (const b of brands) {
+        done += Number(b.doneCount) || 0;
+        left += Number(b.leftCount) || 0;
+        fail += Number(b.failedCount) || 0;
+      }
+      const failCountEl = document.getElementById("landingFailedCount");
+      if (failCountEl) failCountEl.textContent = String(fail);
+
+      host.innerHTML =
+        '<button type="button" class="pt done" data-jump="done"><span class="k">Done</span>' +
+        esc(String(done)) +
+        "</button>" +
+        '<button type="button" class="pt left" data-jump="left"><span class="k">Left</span>' +
+        esc(String(left)) +
+        "</button>" +
+        '<button type="button" class="pt fail' +
+        (landingPane === "failed" ? " active-filter" : "") +
+        '" data-jump="failed"><span class="k">Failed</span>' +
+        esc(String(fail)) +
+        "</button>";
+    }
+
+    function syncProgressHash() {
+      // Never rewrite the URL while the scraper route is active.
+      if (readAppRoute() !== "progress") return;
+
+      if (landingPane === "failed" && !progressBrandId) {
+        const next = "#progress/failed";
+        if (location.hash !== next) history.replaceState(null, "", next);
+        return;
+      }
+
+      if (!progressBrandId) {
+        if (location.hash !== "#progress") {
+          history.replaceState(null, "", "#progress");
+        }
+        return;
+      }
+
+      const bucket =
+        landingPane === "failed" ? "failed" : progressBucket || "left";
+      const next =
+        "#progress/" +
+        encodeURIComponent(progressBrandId) +
+        "/" +
+        encodeURIComponent(bucket);
+      if (location.hash !== next) {
+        history.replaceState(null, "", next);
+      }
+    }
+
+    function goToScrape(opts) {
+      const next = "#scrape";
+      if (location.hash !== next) {
+        location.hash = next;
+      }
+      // Apply immediately — hashchange may land after the caller continues.
+      applyAppRoute();
+      if (opts && opts.scrollMerge) {
+        requestAnimationFrame(() => {
+          const el = document.getElementById("mergePanel");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      } else if (opts && opts.scrollResult) {
+        requestAnimationFrame(() => {
+          const el = document.getElementById("resultPanel");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+    }
+
+    function renderProgressSkuList(brand, bucket) {
+      const list = document.getElementById("progressSkuList");
+      list.innerHTML = "";
+      const rows = (brand && brand[bucket]) || [];
+      if (!rows.length) {
+        const empty = document.createElement("li");
+        empty.className = "progress-empty";
+        empty.textContent =
+          bucket === "done"
+            ? "No done SKUs yet for this brand."
+            : bucket === "failed"
+              ? "No failed SKUs for this brand."
+              : "Nothing left — all in-scope SKUs are done or failed.";
+        list.appendChild(empty);
+        return;
+      }
+      for (const row of rows) {
+        const li = document.createElement("li");
+        const canOpen = bucket === "done" || bucket === "failed";
+        if (canOpen) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.innerHTML =
+            '<span class="sku-id">' +
+            esc(row.sku) +
+            "</span>" +
+            '<span class="sku-meta">' +
+            esc(row.title || row.reason || row.status || "") +
+            "</span>";
+          btn.title = row.title || row.reason || row.sku;
+          btn.addEventListener("click", () => {
+            const brandSel = document.getElementById("brand");
+            if (brandSel && brand && [...brandSel.options].some((o) => o.value === brand.id)) {
+              brandSel.value = brand.id;
+            }
+            // Prefer batch/canonical sku when progress row is an IMS typo alias
+            const sku = row.matchedSku || row.sku;
+            goToScrape({ scrollResult: true });
+            openSavedSku(sku);
+          });
+          li.appendChild(btn);
+        } else {
+          const rowEl = document.createElement("div");
+          rowEl.className = "progress-sku-row";
+          rowEl.innerHTML =
+            '<span class="sku-id">' +
+            esc(row.sku) +
+            "</span>" +
+            '<span class="sku-meta">pending</span>';
+          li.appendChild(rowEl);
+        }
+        list.appendChild(li);
+      }
+    }
+
+    function renderProgressDetail() {
+      const detail = document.getElementById("progressDetail");
+      const empty = document.getElementById("progressDetailEmpty");
+      if (!progressData || !progressBrandId) {
+        if (detail) detail.classList.add("hidden");
+        if (empty) empty.classList.remove("hidden");
+        return;
+      }
+      const brand = findProgressBrand(progressBrandId);
+      if (!brand) {
+        if (detail) detail.classList.add("hidden");
+        if (empty) empty.classList.remove("hidden");
+        return;
+      }
+      progressBrandId = brand.id;
+      if (empty) empty.classList.add("hidden");
+      detail.classList.remove("hidden");
+      document.getElementById("progressBrandLabel").textContent = brand.label;
+      const bits = [];
+      bits.push(brand.total + " total");
+      if (brand.csv) bits.push(brand.csv);
+      if (brand.batchDir) bits.push(brand.batchDir);
+      else bits.push("no batch yet");
+      document.getElementById("progressBrandMeta").textContent = bits.join(" · ");
+
+      const tabs = document.getElementById("progressTabs");
+      tabs.innerHTML = "";
+      const buckets = [
+        { id: "done", label: "Done", count: brand.doneCount },
+        { id: "left", label: "Left", count: brand.leftCount },
+        { id: "failed", label: "Failed", count: brand.failedCount },
+      ];
+      if (!buckets.some((b) => b.id === progressBucket)) {
+        progressBucket =
+          brand.leftCount > 0 ? "left" : brand.failedCount > 0 ? "failed" : "done";
+      }
+      for (const b of buckets) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = b.id === progressBucket ? "active" : "";
+        btn.setAttribute("role", "tab");
+        btn.setAttribute("aria-selected", b.id === progressBucket ? "true" : "false");
+        btn.innerHTML =
+          esc(b.label) + '<span class="n">' + esc(String(b.count)) + "</span>";
+        btn.addEventListener("click", () => {
+          progressBucket = b.id;
+          if (b.id === "failed") {
+            setLandingPane("failed");
+          } else {
+            setLandingPane("overview", { syncHash: false });
+            renderProgressDetail();
+            syncProgressHash();
+          }
+        });
+        tabs.appendChild(btn);
+      }
+      renderProgressSkuList(brand, progressBucket);
+      syncProgressHash();
+    }
+
+    function collectFailedRows(brandFilterId) {
+      const brands = (progressData && progressData.brands) || [];
+      const rows = [];
+      for (const brand of brands) {
+        if (brandFilterId && brand.id !== brandFilterId) continue;
+        const failed = Array.isArray(brand.failed) ? brand.failed : [];
+        for (const row of failed) {
+          rows.push({
+            brandId: brand.id,
+            brandLabel: brand.label,
+            sku: row.sku,
+            matchedSku: row.matchedSku,
+            reason: row.reason || row.title || row.status || "",
+          });
+        }
+      }
+      return rows;
+    }
+
+    function renderAggregateFailed() {
+      const list = document.getElementById("aggregateFailedList");
+      const scope = document.getElementById("failedScopeLabel");
+      const showAllBtn = document.getElementById("failedShowAll");
+      if (!list) return;
+
+      const filterBrand = progressBrandId
+        ? findProgressBrand(progressBrandId)
+        : null;
+      const rows = collectFailedRows(filterBrand ? filterBrand.id : null);
+
+      if (scope) {
+        if (filterBrand) {
+          scope.innerHTML =
+            "Showing <strong>" +
+            esc(filterBrand.label) +
+            "</strong> · " +
+            esc(String(rows.length)) +
+            " failed";
+        } else {
+          scope.innerHTML =
+            "All brands · <strong>" +
+            esc(String(rows.length)) +
+            "</strong> failed";
+        }
+      }
+      if (showAllBtn) {
+        showAllBtn.hidden = !filterBrand;
+      }
+
+      list.innerHTML = "";
+      if (!rows.length) {
+        const empty = document.createElement("li");
+        empty.className = "progress-empty";
+        empty.textContent = filterBrand
+          ? "No failed SKUs for " + filterBrand.label + "."
+          : "No failed SKUs across brands.";
+        list.appendChild(empty);
+        return;
+      }
+
+      for (const row of rows) {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.innerHTML =
+          '<span class="sku-main">' +
+          '<span class="sku-brand">' +
+          esc(row.brandLabel) +
+          "</span>" +
+          '<span class="sku-id">' +
+          esc(row.sku) +
+          "</span></span>" +
+          '<span class="sku-meta">' +
+          esc(row.reason) +
+          "</span>";
+        btn.title = (row.brandLabel || "") + " · " + (row.reason || row.sku);
+        btn.addEventListener("click", () => {
+          const brandSel = document.getElementById("brand");
+          if (
+            brandSel &&
+            [...brandSel.options].some((o) => o.value === row.brandId)
+          ) {
+            brandSel.value = row.brandId;
+          }
+          const sku = row.matchedSku || row.sku;
+          goToScrape({ scrollResult: true });
+          openSavedSku(sku);
+        });
+        li.appendChild(btn);
+        list.appendChild(li);
+      }
+    }
+
+    function renderProgressBrands() {
+      const host = document.getElementById("brandProgressCards");
+      if (!host) return;
+      host.innerHTML = "";
+      const brands = (progressData && progressData.brands) || [];
+      if (!brands.length) {
+        host.textContent = "No brand progress data.";
+        return;
+      }
+      for (const brand of brands) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "brand-card";
+        btn.setAttribute("data-brand", brand.id);
+        btn.setAttribute(
+          "aria-pressed",
+          brand.id === progressBrandId ? "true" : "false"
+        );
+        if (brand.id === progressBrandId) btn.classList.add("active");
+        if (!brand.available) btn.classList.add("unavailable");
+        btn.innerHTML =
+          '<span class="pb-label">' +
+          esc(brand.label) +
+          "</span>" +
+          '<span class="pb-counts">' +
+          '<span class="c-done">' +
+          brand.doneCount +
+          " done</span> · " +
+          '<span class="c-left">' +
+          brand.leftCount +
+          " left</span> · " +
+          '<span class="c-fail">' +
+          brand.failedCount +
+          " fail</span></span>";
+        host.appendChild(btn);
+      }
+    }
+
+    function onProgressBrandClick(brandId) {
+      const brand = findProgressBrand(brandId);
+      if (!brand) return;
+      // Keep Failed pane when already there so brand acts as a filter.
+      const keepFailed = landingPane === "failed";
+      selectProgressBrand(brand, keepFailed ? "failed" : null);
+      syncProgressHash();
+      document.getElementById("progressPanel").scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
+
+    // Single document-level click delegation — brand cards + totals chips.
+    document.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!t || typeof t.closest !== "function") return;
+
+      const totals = document.getElementById("progressTotals");
+      if (totals && totals.contains(t)) {
+        const chip = t.closest("button.pt[data-jump]");
+        if (chip && totals.contains(chip)) {
+          e.preventDefault();
+          const jump = chip.getAttribute("data-jump");
+          if (jump === "failed") {
+            progressBucket = "failed";
+            setLandingPane("failed");
+          } else if (jump === "done" || jump === "left") {
+            progressBucket = jump;
+            setLandingPane("overview", { syncHash: false });
+            if (progressBrandId) renderProgressDetail();
+            else syncProgressHash();
+            syncProgressHash();
+          }
+          return;
+        }
+      }
+
+      const host = document.getElementById("brandProgressCards");
+      if (!host || !host.contains(t)) return;
+      const btn = t.closest("button.brand-card[data-brand]");
+      if (!btn || !host.contains(btn)) return;
+      e.preventDefault();
+      onProgressBrandClick(btn.getAttribute("data-brand"));
+    });
+
+    async function loadBrandProgress() {
+      const host = document.getElementById("brandProgressCards");
+      try {
+        const res = await fetch("/api/brand-progress");
+        const data = await res.json();
+        if (!data || !data.ok) {
+          host.textContent =
+            "progress error: " + ((data && data.error) || res.status);
+          return null;
+        }
+        progressData = data;
+        const hash = readProgressHash();
+        const hashBrand = hash.brandId ? findProgressBrand(hash.brandId) : null;
+
+        // Honor #progress/seiko[/failed] BEFORE picking a default (Titan has
+        // leftover SKUs and used to overwrite Seiko deep links on every load).
+        if (hash.pane === "failed" && !hashBrand) {
+          progressBrandId = null;
+          progressBucket = "failed";
+          landingPane = "failed";
+        } else if (hashBrand) {
+          progressBrandId = hashBrand.id;
+          progressBucket = hash.bucket || defaultBucketForBrand(hashBrand);
+          landingPane = hash.pane || "overview";
+        } else {
+          if (progressBrandId && !findProgressBrand(progressBrandId)) {
+            progressBrandId = null;
+          }
+          if (!progressBrandId) {
+            const pick = pickDefaultProgressBrand(data.brands);
+            if (pick) {
+              progressBrandId = pick.id;
+              progressBucket = defaultBucketForBrand(pick);
+            }
+          }
+          if (hash.pane) landingPane = hash.pane;
+        }
+        renderProgressTotals();
+        renderProgressBrands();
+        renderProgressDetail();
+        setLandingPane(landingPane, { syncHash: false });
+        renderAggregateFailed();
+        syncProgressHash();
+        return data;
+      } catch (err) {
+        host.textContent = "progress error: " + (err.message || err);
+        return null;
+      }
+    }
+
+    function applyProgressHash() {
+      applyAppRoute();
+      const hash = readProgressHash();
+      if (!hash.isProgress) return;
+
+      if (hash.pane === "failed" && !hash.brandId) {
+        progressBrandId = null;
+        progressBucket = "failed";
+        landingPane = "failed";
+      } else if (hash.brandId) {
+        const brand = findProgressBrand(hash.brandId);
+        if (brand) {
+          // Deep link / hash navigation — honor brand + optional bucket.
+          // Never fall back to Titan/default while a valid brand is in the hash.
+          progressBrandId = brand.id;
+          progressBucket = hash.bucket || defaultBucketForBrand(brand);
+          landingPane = hash.pane || "overview";
+        } else if (!progressData) {
+          // Data not loaded yet — keep the requested id for loadBrandProgress.
+          progressBrandId = hash.brandId;
+          if (hash.bucket) progressBucket = hash.bucket;
+          if (hash.pane) landingPane = hash.pane;
+        }
+        // Unknown brand id with data loaded: leave current selection alone.
+      } else if (progressData && !progressBrandId) {
+        const pick = pickDefaultProgressBrand(progressData.brands);
+        if (pick) {
+          progressBrandId = pick.id;
+          progressBucket = defaultBucketForBrand(pick);
+        }
+        landingPane = hash.pane || "overview";
+      } else if (hash.pane) {
+        landingPane = hash.pane;
+      }
+      // Bare #progress with an existing selection: keep brand; only refresh UI.
+
+      if (hash.bucket && ["done", "left", "failed"].includes(hash.bucket)) {
+        progressBucket = hash.bucket;
+      }
+
+      if (progressData) {
+        renderProgressTotals();
+        renderProgressBrands();
+        renderProgressDetail();
+        setLandingPane(landingPane, { syncHash: false });
+        renderAggregateFailed();
+        syncProgressHash();
+      }
+      const panel = document.getElementById("progressPanel");
+      if (panel) {
+        panel.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }
+    }
+
+    function onHashRouteChange() {
+      const route = applyAppRoute();
+      if (route === "progress") {
+        applyProgressHash();
+      }
+    }
+
+    document.getElementById("refreshProgress").addEventListener("click", () => {
+      loadBrandProgress();
+    });
+    function jumpToProgress(e) {
+      if (e) e.preventDefault();
+      landingPane = "overview";
+      if (!progressBrandId && progressData) {
+        const pick = pickDefaultProgressBrand(progressData.brands);
+        if (pick) {
+          progressBrandId = pick.id;
+          progressBucket = defaultBucketForBrand(pick);
+        }
+      }
+      if (readAppRoute() !== "progress") {
+        location.hash = "#progress";
+        return;
+      }
+      syncProgressHash();
+      applyProgressHash();
+    }
+    function jumpToFailed(e) {
+      if (e) e.preventDefault();
+      progressBucket = "failed";
+      landingPane = "failed";
+      // Aggregate view unless a brand is already selected with failures.
+      if (location.hash !== "#progress/failed") {
+        location.hash = "#progress/failed";
+      } else {
+        applyProgressHash();
+      }
+    }
+    document.getElementById("progressDeepLink").addEventListener("click", jumpToProgress);
+    const jumpTop = document.getElementById("jumpProgressTop");
+    if (jumpTop) jumpTop.addEventListener("click", jumpToProgress);
+    const jumpFailed = document.getElementById("jumpFailedTop");
+    if (jumpFailed) jumpFailed.addEventListener("click", jumpToFailed);
+    const jumpScrapeTop = document.getElementById("jumpScrapeTop");
+    if (jumpScrapeTop) {
+      jumpScrapeTop.addEventListener("click", (e) => {
+        e.preventDefault();
+        goToScrape();
+      });
+    }
+    const navLanding = document.getElementById("navLanding");
+    if (navLanding) {
+      navLanding.addEventListener("click", (e) => {
+        e.preventDefault();
+        jumpToProgress(e);
+      });
+    }
+    const navScrape = document.getElementById("navScrape");
+    if (navScrape) {
+      navScrape.addEventListener("click", (e) => {
+        e.preventDefault();
+        goToScrape();
+      });
+    }
+
+    const landingTabs = document.getElementById("landingTabs");
+    if (landingTabs) {
+      landingTabs.addEventListener("click", (e) => {
+        const btn = e.target && e.target.closest
+          ? e.target.closest("button[data-pane]")
+          : null;
+        if (!btn || !landingTabs.contains(btn)) return;
+        e.preventDefault();
+        const pane = btn.getAttribute("data-pane");
+        if (pane === "failed") {
+          progressBucket = "failed";
+          setLandingPane("failed");
+        } else {
+          if (!progressBrandId && progressData) {
+            const pick = pickDefaultProgressBrand(progressData.brands);
+            if (pick) progressBrandId = pick.id;
+          }
+          if (progressBucket === "failed") {
+            const brand = findProgressBrand(progressBrandId);
+            const def = brand ? defaultBucketForBrand(brand) : "left";
+            progressBucket = def === "failed" ? "done" : def;
+          }
+          setLandingPane("overview", { syncHash: false });
+          renderProgressBrands();
+          renderProgressDetail();
+          syncProgressHash();
+        }
+      });
+    }
+    const failedShowAll = document.getElementById("failedShowAll");
+    if (failedShowAll) {
+      failedShowAll.addEventListener("click", () => {
+        progressBrandId = null;
+        progressBucket = "failed";
+        landingPane = "failed";
+        renderProgressBrands();
+        renderProgressDetail();
+        renderAggregateFailed();
+        syncProgressHash();
+      });
+    }
+    window.addEventListener("hashchange", onHashRouteChange);
+
+    async function loadIndex() {
+      try {
+        const res = await fetch("/api/results");
+        const data = await res.json();
+        const brandSel = document.getElementById("brand");
+        const brandFilter = (brandSel && brandSel.value) || "";
+        const allRows = data.results || [];
+        const rows = brandFilter
+          ? allRows.filter((row) => {
+              const key = brandKeyForRow(row);
+              return !key || key === brandFilter;
+            })
+          : allRows;
+        const ok = rows.filter((r) => r.status === "ok").length;
+        const failed = rows.length - ok;
+        indexMeta.textContent =
+          rows.length + " SKUs · " +
+          ok + " ok · " +
+          failed + " fail" +
+          (brandFilter ? " · " + brandFilter : "") +
+          (data.batchDir ? " · " + data.batchDir : "");
+        mobileSkuCount.textContent = rows.length + " SKUs";
+
+        skuList.innerHTML = "";
+        if (!rows.length) {
+          const li = document.createElement("li");
+          li.className = "empty-index";
+          li.textContent = brandFilter
+            ? "No saved " + brandFilter + " results yet. Run a scrape or batch."
+            : "No saved results yet. Run a scrape or batch.";
+          skuList.appendChild(li);
+          return data;
+        }
+        for (const row of rows) {
+          const li = document.createElement("li");
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.dataset.sku = row.sku;
+          btn.title = row.title || row.reason || row.sku;
+          const srcHint =
+            row.productSource === "tatacliq"
+              ? ' <span class="muted" title="Tata Cliq fallback">· tc</span>'
+              : "";
+          const nearHint =
+            row.nearMatch || row.typoFrom
+              ? ' <span class="muted" title="Near match' +
+                (row.matchedStyle ? " → " + esc(row.matchedStyle) : "") +
+                '">· near</span>'
+              : "";
+          btn.innerHTML =
+            '<span class="sku-id">' + esc(row.sku) + srcHint + nearHint + "</span>" +
+            '<span class="dot ' + (row.status === "ok" ? "ok" : "fail") + '"></span>';
+          if (row.sku === activeSku) btn.classList.add("active");
+          btn.addEventListener("click", () => {
+            openSavedSku(row.sku);
+            closeDrawer();
+          });
+          li.appendChild(btn);
+          skuList.appendChild(li);
+        }
+        return data;
+      } catch (err) {
+        indexMeta.textContent = "index error: " + (err.message || err);
+        return null;
+      }
+    }
+
+    async function openSavedSku(sku) {
+      setActiveSku(sku);
+      setBadge("idle", "loading…");
+      timing.textContent = "";
+      mode.textContent = "";
+      show(document.getElementById("resultPanel"), false);
+      show(document.getElementById("specsPanel"), false);
+      show(document.getElementById("galleryPanel"), false);
+      show(document.getElementById("rawPanel"), false);
+
+      try {
+        const res = await fetch("/api/results/" + encodeURIComponent(sku));
+        const data = await res.json();
+        renderProductView(data, { fromSaved: true, sku });
+      } catch (err) {
+        setBadge("err", "error");
+        timing.textContent = "";
+        mode.textContent = err.message || String(err);
+      }
+    }
+
+    document.getElementById("refreshIndex").addEventListener("click", () => {
+      loadIndex();
+    });
+
+    document.getElementById("runMerge").addEventListener("click", () => {
+      runMergePreview();
+    });
+
+    const rulesToggle = document.getElementById("rulesToggle");
+    const rulesPanel = document.getElementById("rulesPanel");
+    rulesToggle.addEventListener("click", () => {
+      const open = rulesPanel.classList.contains("hidden");
+      show(rulesPanel, open);
+      rulesToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    document.getElementById("jumpMerge").addEventListener("click", (e) => {
+      e.preventDefault();
+      goToScrape({ scrollMerge: true });
+    });
+
+    fetch("/api/merge-policy")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d || !d.policy) return;
+        if (d.policy.summary) {
+          document.getElementById("mergePolicy").textContent = d.policy.summary;
+          document.getElementById("rulesSummary").textContent = d.policy.summary;
+        }
+        const list = document.getElementById("rulesList");
+        if (Array.isArray(d.policy.rules) && d.policy.rules.length) {
+          list.innerHTML = "";
+          for (const rule of d.policy.rules) {
+            const li = document.createElement("li");
+            li.textContent = rule;
+            list.appendChild(li);
+          }
+          const extra = document.createElement("li");
+          extra.textContent =
+            "Gender & other enums: shared normalizer maps scrape wording → IMS options; unknown → blank (never invent). Same policy for Balmain and Titan.";
+          list.appendChild(extra);
+        }
+      })
+      .catch(() => {});
+
+    const brandDefaults = {
+      balmain: "B48303382",
+      titan: "NU95198WM01",
+      timex: "TWEG26300",
+      tissot: "T1564103337100",
+      fossil: "FS5512",
+      casio: "D275",
+      seiko: "SPB121J1",
+      longines: "L81154716",
+      rado: "R48921703",
+      "emporio-armani": "AR70021",
+      "armani-exchange": "AX5742",
+      earnshaw: "ES-8334-44",
+      "alexandre-christie": "2B58BFBROBO",
+      "michael-kors": "MK7688",
+      "phillip-plein": "PWPUA0925",
+    };
+    const brandSelect = document.getElementById("brand");
+    brandSelect.addEventListener("change", () => {
+      const id = brandSelect.value;
+      const input = document.getElementById("sku");
+      const cur = input.value.trim().toUpperCase();
+      const otherDefaults = Object.values(brandDefaults).map((s) => s.toUpperCase());
+      if (!cur || otherDefaults.includes(cur)) {
+        input.value = brandDefaults[id] || "";
+      }
+      loadIndex();
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      runBtn.disabled = true;
+      setBadge("idle", "running…");
+      timing.textContent = "";
+      mode.textContent = "";
+      show(document.getElementById("resultPanel"), false);
+      show(document.getElementById("specsPanel"), false);
+      show(document.getElementById("galleryPanel"), false);
+      show(document.getElementById("rawPanel"), false);
+
+      const brand = brandSelect.value || "balmain";
+      const payload = {
+        brand,
+        sku:
+          document.getElementById("sku").value.trim() ||
+          brandDefaults[brand] ||
+          "B48303382",
+        downloadImages: document.getElementById("downloadImages").checked,
+        useFixture: document.getElementById("useFixture").checked,
+      };
+      setActiveSku(payload.sku);
+
+      try {
+        const res = await fetch("/api/scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        renderProductView(data, { sku: payload.sku });
+        await loadIndex();
+        setActiveSku(payload.sku);
+      } catch (err) {
+        setBadge("err", "error");
+        timing.textContent = "";
+        mode.textContent = err.message || String(err);
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
+
+    // Normalize empty hash → landing; never force #progress while on #scrape.
+    if (!String(location.hash || "").replace(/^#/, "").trim()) {
+      history.replaceState(null, "", "#progress");
+    }
+    applyAppRoute();
+
+    loadBrandProgress().then(() => {
+      if (readAppRoute() === "progress") {
+        applyProgressHash();
+      }
+      // On scrape route: leave hash alone; progress data stays warm for nav back.
+    });
+
+    loadIndex().then((data) => {
+      if (readAppRoute() !== "scrape") return;
+      if (!data || !data.results || !data.results.length) return;
+      const prefer =
+        data.results.find((r) => r.sku === "NU95198WM01") ||
+        data.results.find((r) => r.status === "ok") ||
+        data.results[0];
+      if (prefer) openSavedSku(prefer.sku);
+    });
+  </script>
+</body>
+</html>

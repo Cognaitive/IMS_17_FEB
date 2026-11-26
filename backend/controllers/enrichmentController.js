@@ -35,6 +35,7 @@ const armaniExchange = require("../scripts/enrichment/brands/armani-exchange");
 const earnshaw = require("../scripts/enrichment/brands/earnshaw");
 const alexandreChristie = require("../scripts/enrichment/brands/alexandre-christie");
 const michaelKors = require("../scripts/enrichment/brands/michael-kors");
+const phillipPlein = require("../scripts/enrichment/brands/phillip-plein");
 
 const ENRICHMENT_ROOT = path.join(__dirname, "../scripts/enrichment");
 const ENRICHMENT_OUTPUT = path.join(ENRICHMENT_ROOT, "output");
@@ -121,6 +122,10 @@ const MICHAEL_KORS_BATCH_PRODUCTS_PATH = path.join(
   ENRICHMENT_OUTPUT,
   "michael-kors-batch/products.json"
 );
+const PHILLIP_PLEIN_BATCH_PRODUCTS_PATH = path.join(
+  ENRICHMENT_OUTPUT,
+  "phillip-plein-batch/products.json"
+);
 
 let balmainBatchCache = { mtimeMs: 0, bySku: new Map() };
 let titanBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
@@ -136,6 +141,7 @@ let armaniExchangeBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() }
 let earnshawBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 let alexandreChristieBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 let michaelKorsBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
+let phillipPleinBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 
 function balmainSkuKey(raw) {
   try {
@@ -283,6 +289,17 @@ function alexandreChristieSkuKey(raw) {
 function michaelKorsSkuKey(raw) {
   try {
     return michaelKors.normalizeSku(raw).compact;
+  } catch {
+    return String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[.\-_\s]/g, "");
+  }
+}
+
+function phillipPleinSkuKey(raw) {
+  try {
+    return phillipPlein.normalizeSku(raw).compact;
   } catch {
     return String(raw || "")
       .trim()
@@ -728,6 +745,17 @@ function isMichaelKorsBrand(brand) {
   );
 }
 
+function isPhillipPleinBrand(brand) {
+  const b = String(brand || "").trim();
+  return (
+    /^phillip\s*plein$/i.test(b) ||
+    /^philipp\s*plein$/i.test(b) ||
+    /^phillipp\s*plein$/i.test(b) ||
+    /^phillip-plein$/i.test(b) ||
+    /^philipp-plein$/i.test(b)
+  );
+}
+
 function loadRadoBatchIndex() {
   return loadPrefixedBrandBatchIndex(
     "rado",
@@ -782,6 +810,15 @@ function loadMichaelKorsBatchIndex() {
   );
 }
 
+function loadPhillipPleinBatchIndex() {
+  return loadPrefixedBrandBatchIndex(
+    "phillip-plein",
+    PHILLIP_PLEIN_BATCH_PRODUCTS_PATH,
+    phillipPleinBatchCache,
+    phillipPleinSkuKey
+  );
+}
+
 const ENRICHABLE_BRANDS = [
   "Balmain",
   "Titan",
@@ -797,6 +834,7 @@ const ENRICHABLE_BRANDS = [
   "Earnshaw",
   "Alexandre Christie",
   "Michael Kors",
+  "Phillip Plein",
 ];
 
 function detectEnrichmentBrand(brand) {
@@ -814,6 +852,7 @@ function detectEnrichmentBrand(brand) {
   if (isEarnshawBrand(brand)) return "earnshaw";
   if (isAlexandreChristieBrand(brand)) return "alexandre-christie";
   if (isMichaelKorsBrand(brand)) return "michael-kors";
+  if (isPhillipPleinBrand(brand)) return "phillip-plein";
   return null;
 }
 
@@ -1129,6 +1168,17 @@ async function resolveMichaelKorsEnrichmentRecord(sku, opts = {}) {
     keyFn: michaelKorsSkuKey,
     enrichSku: michaelKors.enrichSku,
     missLabel: "michael-kors-batch / michael-kors-*",
+  });
+}
+
+async function resolvePhillipPleinEnrichmentRecord(sku, opts = {}) {
+  return resolveSimpleBrandRecord(sku, {
+    ...opts,
+    loadBatch: loadPhillipPleinBatchIndex,
+    skuMatchKeys: phillipPlein.skuMatchKeys,
+    keyFn: phillipPleinSkuKey,
+    enrichSku: phillipPlein.enrichSku,
+    missLabel: "phillip-plein-batch / phillip-plein-*",
   });
 }
 
@@ -1455,6 +1505,14 @@ const pullMichaelKorsEnrichment = async (req, res) =>
     resolveRecord: resolveMichaelKorsEnrichmentRecord,
   });
 
+const pullPhillipPleinEnrichment = async (req, res) =>
+  pullBrandEnrichment(req, res, {
+    brandLabel: "Phillip Plein",
+    enrichmentKey: "phillip-plein",
+    isBrand: isPhillipPleinBrand,
+    resolveRecord: resolvePhillipPleinEnrichmentRecord,
+  });
+
 const ENRICH_HANDLERS = {
   balmain: pullBalmainEnrichment,
   titan: pullTitanEnrichment,
@@ -1470,6 +1528,7 @@ const ENRICH_HANDLERS = {
   earnshaw: pullEarnshawEnrichment,
   "alexandre-christie": pullAlexandreChristieEnrichment,
   "michael-kors": pullMichaelKorsEnrichment,
+  "phillip-plein": pullPhillipPleinEnrichment,
 };
 
 // @desc    Pull brand enrichment — detects Balmain / Titan / Timex / Tissot / Fossil / Casio / Seiko / Longines / Rado / Emporio Armani / Armani Exchange / Earnshaw / Alexandre Christie / Michael Kors
@@ -1713,6 +1772,7 @@ module.exports = {
   pullEarnshawEnrichment,
   pullAlexandreChristieEnrichment,
   pullMichaelKorsEnrichment,
+  pullPhillipPleinEnrichment,
   pullProductEnrichment,
   publishProduct,
   rejectProductEnrichment,
@@ -1731,6 +1791,7 @@ module.exports = {
   loadEarnshawBatchIndex,
   loadAlexandreChristieBatchIndex,
   loadMichaelKorsBatchIndex,
+  loadPhillipPleinBatchIndex,
   detectEnrichmentBrand,
   ENRICHABLE_BRANDS,
 };

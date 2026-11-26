@@ -23,7 +23,8 @@ Unpublished counts from Mongo (`isPublished` false/missing), Nov 2025. Exclude a
 | Longines | 43 | longines.com (+ Collective / Tata Cliq / TGT Luxe / **Ethos** on miss) | **Added** (live + sitemap + retailer fallback) | Batch **34 ok / 9 remaining**; typo `L22734716→L27734716`; Collective + TGT Luxe recovered retailer-only SKUs; see `output/longines-batch/404-report.json` |
 | Earnshaw | 42 | thomas-earnshaw.com (Shopify; + Collective / Tata Cliq / TGT Luxe / **Ethos** on miss) | **Batch run** (live + catalog + retailers) | **35 ok / 7 fail**; all oks from official Earnshaw; typo `ES-8006-ll→ES-8006-II`; remaining `ES-8006-00`, `ES-8294-44`, `ES-8294-88`, `ES-829401`, `ES-8306-01`, `ES-830603`, `ES-830604` (not on Shopify catalog / retailer chain); batch `output/earnshaw-batch/` |
 | Rado | 42 | rado.com/en_in (+ Collective / Tata Cliq / TGT Luxe / **Ethos** on miss) | **Batch run** (live + sitemap + retailers) | **42 ok / 0 fail**; sources: rado 31 · Collective 8 · Tata Cliq 1 · Ethos 1 · TGT Luxe 1; recovered `R22894153` (Tata Cliq) + `R22910153` (Ethos); batch `output/rado-batch/` |
-| Michael Kors | 38 | michaelkors.com (Fossil Group) | Deferred | Akamai; can mirror Fossil pattern later |
+| Michael Kors | 38 | michaelkors.com (+ Collective / Tata / **JIT** / TGT / Ethos) | **Batch + need-recover** | Need-recover **5/5 ok** via The Collective (`MKO125`, `MK4817`, `MK7677`, `MK7681`, `MK7682`); applied to IMS |
+| Phillip Plein | 7 | justintime.in (primary) + Collective / Tata / TGT / Ethos | **Started** | IMS spelling **Phillip Plein**; batch `output/phillip-plein-batch/` **3 ok / 1 fail**; applied `PWPUA0925`, `PWPUA1025`, `PW0AA0722` (near-match JIT `PWOAA0722`); still need `PWBA0523` |
 | Emporio Armani | 37 | armani.com (+ Amazon.in / **Tata Cliq** / **Ethos** on miss) | **Batch run** (official URL-guess + retailers) | **30 ok / 7 fail**; Tata Cliq recovered AR11123, AR1704; remaining AR0488, AR11170, AR11503, AR115371, AR11741, AR1879, AR1947; batch `output/emporio-armani-batch/` |
 | Armani Exchange | 31 | armani.com (+ Amazon.in / **Tata Cliq** / **Ethos** on miss) | **Batch run** (official URL-guess + retailers) | **26 ok / 5 fail**; Tata Cliq recovered AX2706, AX2716, AX4301; remaining AX2194, AX2620, AX2738, AX5573, AX5583; batch `output/armani-exchange-batch/` |
 | Citizen | 16 | citizenwatches.store | Deferred | Angular SPA; API host opaque to Node |
@@ -31,17 +32,19 @@ Unpublished counts from Mongo (`isPublished` false/missing), Nov 2025. Exclude a
 
 ## Get details brands now supported
 
-Balmain, Titan, Timex, **Tissot**, **Fossil**, **Casio**, **Seiko**, **Longines**, **Rado**, **Emporio Armani**, **Armani Exchange**, **Earnshaw**, **Alexandre Christie**
+Balmain, Titan, Timex, **Tissot**, **Fossil**, **Casio**, **Seiko**, **Longines**, **Rado**, **Emporio Armani**, **Armani Exchange**, **Earnshaw**, **Alexandre Christie**, **Michael Kors**, **Phillip Plein**
 
 ## India retailer miss-recovery
 
-Prefer official brand / manufacturer sites first. Shared helper: `lib/retailerFallback.js` (always includes **Tata Cliq Luxury** unless skipped).
+Prefer official brand / manufacturer sites first. Shared helper: `lib/retailerFallback.js` (always includes **Tata Cliq Luxury** unless skipped; **Just In Time** after Tata for all brands).
 
 | Chain | Order |
 |-------|-------|
-| Luxury (Longines / Rado / Earnshaw / Alexandre Christie) | Collective → **Tata Cliq** → TGT Luxe → **Ethos** |
-| Armani (EA / AX) | Amazon.in → **Tata Cliq** → **Ethos** |
-| Balmain | **Tata Cliq** (existing) |
+| Luxury (default / Longines / Rado / Earnshaw / AC / MK / …) | Collective → **Tata Cliq** → **Just In Time** → TGT Luxe → **Ethos** |
+| jit_first (Phillip Plein) | **Just In Time** → Collective → **Tata Cliq** → TGT Luxe → **Ethos** |
+| Armani (EA / AX) | Amazon.in → **Tata Cliq** → **Just In Time** → **Ethos** |
+| Casio | Collective → **Tata Cliq** → **Just In Time** → TGT Luxe → **Ethos** |
+| Balmain | **Tata Cliq** (existing) + JIT in shared chain |
 
 **Ethos** (`lib/ethos.js`): miss-recovery only; Node often hits Cloudflare — use REF URLs / `fixtures/ethos-{SKU}.html` when live is blocked. Helios stays out of scope.
 

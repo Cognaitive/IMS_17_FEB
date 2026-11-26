@@ -63,17 +63,25 @@ const BRAND_BATCHES = [
     dirs: ["balmain-batch", "balmain-batch-archived"],
   },
   { id: "titan", brandRe: /^titan$/i, dirs: ["titan-batch"] },
-  { id: "timex", brandRe: /^timex$/i, dirs: ["timex-batch", "timex-tw2y18500ik"] },
-  { id: "tissot", brandRe: /^tissot$/i, dirs: ["tissot-batch"] },
+  {
+    id: "timex",
+    brandRe: /^timex$/i,
+    dirs: ["timex-batch", "timex-tw2y18500ik", "timex-need-recover"],
+  },
+  {
+    id: "tissot",
+    brandRe: /^tissot$/i,
+    dirs: ["tissot-batch", "tissot-need-recover"],
+  },
   {
     id: "seiko",
     brandRe: /^seiko$/i,
-    dirs: ["seiko-batch"],
+    dirs: ["seiko-batch", "seiko-need-recover"],
   },
   {
     id: "longines",
     brandRe: /^longines$/i,
-    dirs: ["longines-batch", "longines-tgtluxe-recover"],
+    dirs: ["longines-batch", "longines-tgtluxe-recover", "longines-need-recover"],
   },
   {
     id: "rado",
@@ -86,6 +94,7 @@ const BRAND_BATCHES = [
     dirs: [
       "emporio-armani-batch",
       "emporio-armani-recover-tatacliq-ethos",
+      "emporio-armani-need-recover",
     ],
   },
   {
@@ -99,27 +108,32 @@ const BRAND_BATCHES = [
   {
     id: "earnshaw",
     brandRe: /^(earnshaw|thomas\s*earnshaw)$/i,
-    dirs: ["earnshaw-batch", "earnshaw-recover-typo-ll"],
+    dirs: ["earnshaw-batch", "earnshaw-recover-typo-ll", "earnshaw-need-recover"],
   },
   {
     id: "alexandre-christie",
     brandRe: /^(alexandre|alexandra)\s*christie$/i,
-    dirs: ["alexandre-christie-batch"],
+    dirs: ["alexandre-christie-batch", "alexandre-christie-need-recover"],
   },
   {
     id: "michael-kors",
     brandRe: /^(michael\s*kors|mk)$/i,
-    dirs: ["michael-kors-batch"],
+    dirs: ["michael-kors-batch", "michael-kors-need-recover"],
+  },
+  {
+    id: "phillip-plein",
+    brandRe: /^(phillip|philipp|phillipp)\s*plein$/i,
+    dirs: ["phillip-plein-batch"],
   },
   {
     id: "fossil",
     brandRe: /^fossil$/i,
-    dirs: ["fossil-proof"],
+    dirs: ["fossil-proof", "fossil-need-recover"],
   },
   {
     id: "casio",
     brandRe: /^casio$/i,
-    dirs: ["casio-proof", "casio-recover-ed676-a2474"],
+    dirs: ["casio-proof", "casio-recover-ed676-a2474", "casio-need-recover"],
   },
 ];
 

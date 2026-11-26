@@ -75,15 +75,23 @@ const ETHOS_REF_URLS = {
 };
 
 const PRESETS = {
-  luxury: ["collective", "tatacliq", "tgtluxe", "ethos"],
   /**
-   * Casio India codes (ED### / A####): insert Just In Time after Tata Cliq.
+   * Default luxury miss chain (official already missed):
+   * Collective → Tata Cliq → Just In Time → TGT Luxe → Ethos
+   */
+  luxury: ["collective", "tatacliq", "justintime", "tgtluxe", "ethos"],
+  /**
+   * Casio India codes (ED### / A####): same as luxury; JIT after Tata Cliq.
    * Official casio.com is often CF/Akamai-blocked for Node.
    */
   casio: ["collective", "tatacliq", "justintime", "tgtluxe", "ethos"],
-  /** Always keep Tata Cliq; Ethos last for misses. */
-  armani: ["tatacliq", "ethos"],
-  tatacliq_ethos: ["tatacliq", "ethos"],
+  /**
+   * Philipp Plein / fashion refs where JIT carries stock: try JIT first.
+   */
+  jit_first: ["justintime", "collective", "tatacliq", "tgtluxe", "ethos"],
+  /** Always keep Tata Cliq; JIT then Ethos. */
+  armani: ["tatacliq", "justintime", "ethos"],
+  tatacliq_ethos: ["tatacliq", "justintime", "ethos"],
 };
 
 /** Official scrape outcomes that should trigger India retailer recovery. */
@@ -151,15 +159,17 @@ function buildSteps(sku, options = {}) {
     ? options.order.slice()
     : (PRESETS[preset] || PRESETS.luxury).slice();
 
-  // Casio brand hint → ensure Just In Time is in the chain after Tata Cliq.
-  if (
-    !options.skipJustInTime &&
-    /^casio$/i.test(String(brandHint)) &&
-    !order.includes("justintime")
-  ) {
+  // Ensure Just In Time is in the chain for every brand (after Tata Cliq)
+  // unless explicitly skipped. Casio/Phillip Plein and other India refs
+  // often live on justintime.in when official/Collective miss.
+  if (!options.skipJustInTime && !order.includes("justintime")) {
     const tataIdx = order.indexOf("tatacliq");
     if (tataIdx >= 0) order.splice(tataIdx + 1, 0, "justintime");
-    else order.push("justintime");
+    else {
+      const collIdx = order.indexOf("collective");
+      if (collIdx >= 0) order.splice(collIdx + 1, 0, "justintime");
+      else order.push("justintime");
+    }
   }
 
   // Hard guarantee: Tata Cliq always present unless explicitly skipped.

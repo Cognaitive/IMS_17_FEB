@@ -14,6 +14,7 @@ export const ENRICHABLE_BRANDS = [
   'Earnshaw',
   'Alexandre Christie',
   'Michael Kors',
+  'Phillip Plein',
 ]
 
 export function getEnrichmentBrandKey(brand) {
@@ -42,6 +43,15 @@ export function getEnrichmentBrandKey(brand) {
   }
   if (b === 'michael kors' || b === 'michael-kors' || b === 'mk') {
     return 'michael-kors'
+  }
+  if (
+    b === 'phillip plein' ||
+    b === 'philipp plein' ||
+    b === 'phillipp plein' ||
+    b === 'phillip-plein' ||
+    b === 'philipp-plein'
+  ) {
+    return 'phillip-plein'
   }
   return null
 }
