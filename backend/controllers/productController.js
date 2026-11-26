@@ -9,6 +9,7 @@ const {
   isStorefrontEligible,
   hasMinimalStorefrontData,
   storefrontImageMongoCondition,
+  storefrontTitleMongoCondition,
 } = require("../utils/storeEligibility");
 const { migrateUrlsToDoSpaces, migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
 const { canAccessBrand, staffWriteError } = require("../utils/staffPermissions");
@@ -62,6 +63,7 @@ const getProducts = async (req, res) => {
       isPublished,
       missingImages,
       missingDescription,
+      readyToConfirm,
     } = req.query;
 
     // Build filter
@@ -128,14 +130,25 @@ const getProducts = async (req, res) => {
     let listingMeta = null;
     if (wantPublished === false) {
       const unpublishedScope = { ...filter };
-      const [unpublishedTotal, missingImagesCount] = await Promise.all([
-        Product.countDocuments(unpublishedScope),
-        Product.countDocuments({
-          ...unpublishedScope,
-          $nor: storefrontImageMongoCondition().$or,
-        }),
-      ]);
-      listingMeta = { unpublishedTotal, missingImagesCount };
+      const readyScope = {
+        ...unpublishedScope,
+        title: storefrontTitleMongoCondition(),
+        ...storefrontImageMongoCondition(),
+      };
+      const [unpublishedTotal, missingImagesCount, readyToConfirmCount] =
+        await Promise.all([
+          Product.countDocuments(unpublishedScope),
+          Product.countDocuments({
+            ...unpublishedScope,
+            $nor: storefrontImageMongoCondition().$or,
+          }),
+          Product.countDocuments(readyScope),
+        ]);
+      listingMeta = {
+        unpublishedTotal,
+        missingImagesCount,
+        readyToConfirmCount,
+      };
     }
 
     const wantMissingImages =
@@ -162,15 +175,38 @@ const getProducts = async (req, res) => {
       };
     }
 
+    // Enriched unpublished: has title + ≥1 image (ready for Approve & go live)
+    const wantReadyToConfirm =
+      readyToConfirm === "1" ||
+      readyToConfirm === "true" ||
+      readyToConfirm === true;
+    if (wantReadyToConfirm) {
+      filter.title = storefrontTitleMongoCondition();
+      const imageOr = storefrontImageMongoCondition().$or;
+      if (filter.$or) {
+        // Keep search $or and require an image via $and
+        filter.$and = [...(filter.$and || []), { $or: imageOr }];
+      } else {
+        filter.$or = imageOr;
+      }
+    }
+
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Build sort object
+    // Build sort object — default New Listings: enriched (title+images) first
     let sortObj = {};
     if (sortBy === "title") {
       sortObj = {
         brand: sortOrder === "asc" ? 1 : -1,
         title: sortOrder === "asc" ? 1 : -1,
+      };
+    } else if (sortBy === "readyFirst" || (wantPublished === false && sortBy === "createdAt")) {
+      // Prefer ready-to-confirm rows above blank Get-details shells
+      sortObj = {
+        title: -1,
+        "images.0": -1,
+        createdAt: sortOrder === "asc" ? 1 : -1,
       };
     } else {
       sortObj = { [sortBy]: sortOrder === "asc" ? 1 : -1 };

@@ -1212,10 +1212,10 @@ const ProductModal = ({
               <button
                 type="button"
                 className="btn-cancel"
-                style={{ borderColor: '#0d9488', color: '#0f766e' }}
                 disabled={!!enrichmentBusy || loading}
                 onClick={handleGetDetailsClick}
-                title="Get details from brand site (fill empty fields only; does not publish)"
+                aria-label="Get details from brand site"
+                title="Get details (does not publish)"
               >
                 {enrichmentBusy === `scan-${product?._id}`
                   ? 'Getting…'

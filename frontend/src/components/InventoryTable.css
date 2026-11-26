@@ -116,25 +116,40 @@
   transform: translateY(-1px);
 }
 
+/* Same 32×32 icon rhythm as view/edit/delete — no text pill */
 .enrich-btn {
-  width: auto;
-  min-width: 32px;
-  padding: 0 0.45rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #0f766e;
-  background-color: #f0fdfa;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: #475569;
+  background-color: #f1f5f9;
 }
 
 .enrich-btn:hover:not(:disabled) {
-  background-color: #ccfbf1;
+  color: #0f172a;
+  background-color: #e2e8f0;
   transform: translateY(-1px);
 }
 
 .enrich-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
   transform: none;
+}
+
+.enrich-btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #475569;
+  border-radius: 50%;
+  animation: enrich-spin 0.7s linear infinite;
+}
+
+@keyframes enrich-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .delete-btn {
