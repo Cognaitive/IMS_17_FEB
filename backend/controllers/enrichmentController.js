@@ -38,7 +38,28 @@ const michaelKors = require("../scripts/enrichment/brands/michael-kors");
 
 const ENRICHMENT_ROOT = path.join(__dirname, "../scripts/enrichment");
 const ENRICHMENT_OUTPUT = path.join(ENRICHMENT_ROOT, "output");
-const FIXTURES_DIR = path.join(ENRICHMENT_ROOT, "fixtures");
+/** Prefer a fixtures dir that actually has files (backend empty → repo scripts/). */
+const FIXTURES_DIR = (() => {
+  const candidates = [
+    path.join(ENRICHMENT_ROOT, "fixtures"),
+    path.join(__dirname, "../../scripts/enrichment/fixtures"),
+  ];
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(dir) && fs.readdirSync(dir).length > 0) return dir;
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(dir)) return dir;
+    } catch {
+      /* ignore */
+    }
+  }
+  return candidates[0];
+})();
 
 const BALMAIN_BATCH_PRODUCTS_PATH = path.join(
   ENRICHMENT_OUTPUT,
@@ -883,20 +904,32 @@ async function resolveTitanEnrichmentRecord(sku, { liveScrape = false } = {}) {
     };
   }
   // Cloudflare often blocks Node — prefer fixture when present, else live
-  // enrichSku applies SKU_TYPO_MAP (e.g. 9210QM01 → 90210QM01 PDP)
+  // enrichSku: fixture → official → near-match → retailers → catalog CDN
   const scraped = await titan.enrichSku(sku, {
     fixtureDir: FIXTURES_DIR,
     preferFixture: true,
   });
   if (!scraped || scraped.status !== "ok") {
+    const raw =
+      scraped?.reason || scraped?.status || "live scrape failed";
+    const reason = /fetch_failed|Cloudflare may be blocking Node/i.test(raw)
+      ? "Titan official site blocked for automated fetch; need fixtures/<STYLE>.html or tatacliq_url (retailer chain also missed)"
+      : raw;
     return {
       record: null,
       source: scraped?.fetchMode === "fixture" ? "fixture-scrape" : "live-scrape",
-      reason: scraped?.reason || scraped?.status || "live scrape failed",
+      reason,
+      retailerAttempts: scraped?.retailerAttempts || undefined,
     };
   }
   const source =
-    scraped.fetchMode === "fixture" ? "fixture-scrape" : "live-scrape";
+    scraped.fetchMode === "fixture"
+      ? "fixture-scrape"
+      : scraped.fetchMode === "catalog"
+        ? "catalog-cdn"
+        : scraped.source && scraped.source !== "titan"
+          ? `retailer-${scraped.source}`
+          : "live-scrape";
   return { record: scraped, source };
 }
 
@@ -1147,7 +1180,13 @@ async function pullBrandEnrichment(req, res, {
       return res.status(404).json({
         success: false,
         message: resolved.reason || "No enrichment data found for this SKU",
-        data: { sku: product.sku, source: resolved.source },
+        data: {
+          sku: product.sku,
+          source: resolved.source,
+          ...(resolved.retailerAttempts
+            ? { retailerAttempts: resolved.retailerAttempts }
+            : {}),
+        },
       });
     }
 

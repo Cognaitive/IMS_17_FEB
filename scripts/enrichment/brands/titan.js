@@ -11,8 +11,15 @@
  * Rule: optional leading "NU"/"nu" is the IMS prefix; strip/add both ways.
  * Style code is alphanumeric (digits + letters), typically NNNNNN + letter suffix.
  *
- * Cloudflare often blocks Node/curl HTML; use --html fixtures/<SKU>.html.
- * Static catalog images under on/demandware.static are usually reachable.
+ * Resolve order:
+ *   1. Fixture / --html (preferFixture)
+ *   2. Official titan.co.in PDP (often Cloudflare-blocked for Node)
+ *   3. Near-match discovery (typo / digit-insert) on miss / CF wall
+ *   4. Retailers: Collective → Tata Cliq Luxury → TGT Luxe → Ethos
+ *      (Tata Cliq always kept unless skipTataCliq)
+ *   5. Catalog CDN bootstrap when style images HEAD-ok (CF bypass for images)
+ *
+ * Cloudflare HTML blocks must not hard-fail Get details — fall through.
  */
 
 const path = require("path");
@@ -20,12 +27,46 @@ const fs = require("fs");
 const { fetchText, sleep } = require("../lib/http");
 const { buildSeo } = require("../lib/seo");
 const { normalizeProductFields } = require("../lib/normalize");
+const {
+  enrichFromRetailerChain,
+  SOURCE: RETAILER_SOURCE,
+} = require("../lib/retailerFallback");
 
 const BRAND = "Titan";
 const SITE_ORIGIN = "https://www.titan.co.in";
 const SOURCE_OFFICIAL = "titan";
+const SOURCE_COLLECTIVE = RETAILER_SOURCE.COLLECTIVE;
+const SOURCE_TATA = RETAILER_SOURCE.TATA;
+const SOURCE_TGT = RETAILER_SOURCE.TGT;
+const SOURCE_ETHOS = RETAILER_SOURCE.ETHOS;
 const CATALOG_IMAGE_BASE =
   `${SITE_ORIGIN}/on/demandware.static/-/Sites-titan-master-catalog/default/images/Titan/Catalog`;
+
+const OFFICIAL_FAIL_CODES = new Set([
+  "not_found",
+  "fetch_failed",
+  "error",
+  "blocked",
+]);
+
+/** Known official PDPs (style → URL). */
+const REF_URLS = {
+  "95198WM01":
+    "https://www.titan.co.in/product/titan-purple-dial-analog-watch-for-women-95198wm01.html",
+};
+
+/** Soft titles when only catalog CDN is available (CF blocked HTML). */
+const REF_CATALOG_META = {
+  "95198WM01": {
+    title: "Titan Raga Delight Purple Dial Analog Metal Strap watch for Women",
+    gender: "Female",
+    dialColor: "Purple",
+    movement: "Quartz",
+  },
+};
+
+const SOFT_MISS_HINT =
+  "Official titan.co.in blocked or missing; retailer chain missed — save PDP HTML to fixtures/<STYLE>.html or pass tatacliq_url";
 
 /**
  * Known IMS / spreadsheet typos → correct titan.co.in style codes.
@@ -661,12 +702,7 @@ async function resolveProductUrl(sku, options = {}) {
 
   const { styleLower, style } = normalizeSku(sku);
 
-  // Reference SKU — known good PDP
-  const REF = {
-    "95198WM01":
-      "https://www.titan.co.in/product/titan-purple-dial-analog-watch-for-women-95198wm01.html",
-  };
-  if (REF[style]) return REF[style];
+  if (REF_URLS[style]) return REF_URLS[style];
 
   for (const url of searchUrlsForSku(sku)) {
     try {
@@ -1119,6 +1155,94 @@ async function enrichSkuOnce(sku, options = {}, nearMeta = null) {
   return product;
 }
 
+async function enrichFromRetailerFallback(sku, options = {}) {
+  const { product, attempts } = await enrichFromRetailerChain(sku, {
+    ...options,
+    brandHint: BRAND,
+    preset: "luxury",
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  });
+  return { product, attempts };
+}
+
+/**
+ * When Cloudflare blocks PDP HTML but catalog JPEGs are reachable, return a
+ * minimal ok record (images + known meta) so Get details can still fill gallery.
+ */
+async function enrichFromCatalogCdn(sku, options = {}, nearMeta = null) {
+  if (options.skipCatalogFallback) return null;
+  const normalized = normalizeSku(sku);
+  const style = normalized.style;
+  if (!style) return null;
+  const exists = await catalogStyleExists(style, options);
+  if (!exists) return null;
+
+  const meta = REF_CATALOG_META[style] || {};
+  const sourceUrl =
+    options.officialUrl ||
+    REF_URLS[style] ||
+    `${SITE_ORIGIN}/product/${style.toLowerCase()}.html`;
+  const images = synthesizeCatalogImages(style, 7);
+  const title =
+    meta.title ||
+    `Titan ${style}`;
+
+  const { product, mapped: fieldMapped, unmapped: fieldUnmapped } =
+    normalizeProductFields(
+      {
+        status: "ok",
+        brand: BRAND,
+        sku: imsSkuForOutput(sku, normalized),
+        officialSku: normalized.sitePid,
+        styleCode: style,
+        sitePid: normalized.sitePid,
+        typoFrom: (nearMeta && nearMeta.typoFrom) || normalized.typoFrom || null,
+        nearMatch: nearMeta ? true : undefined,
+        matchedStyle: nearMeta ? style : undefined,
+        imsSku: nearMeta ? nearMeta.imsSku : undefined,
+        confidence: nearMeta ? nearMeta.confidence || "high" : undefined,
+        nearMatchMethod: nearMeta ? nearMeta.nearMatchMethod : undefined,
+        title,
+        gender: meta.gender || "",
+        dialColor: meta.dialColor || "",
+        movement: meta.movement || "",
+        description: title,
+        images,
+        sourceUrl,
+        source: SOURCE_OFFICIAL,
+        scrapedAt: new Date().toISOString(),
+        rawAttributes: {},
+        extras: { catalogCdnFallback: true },
+        warnings: [
+          "catalog_cdn_fallback_cf_blocked",
+          "specs_incomplete_need_fixture_or_tatacliq",
+        ],
+      },
+      { brandNames: [BRAND] }
+    );
+
+  product.fieldMapped = fieldMapped;
+  product.fieldUnmapped = fieldUnmapped;
+  product.fetchMode = "catalog";
+  Object.assign(product, buildSeo(product, { metaDescription: title }));
+  return product;
+}
+
+function softMissReason(officialReason, retailerAttempts) {
+  const bits = [SOFT_MISS_HINT];
+  if (officialReason && !/Cloudflare may be blocking Node/i.test(officialReason)) {
+    bits.unshift(officialReason);
+  } else if (/Cloudflare|fetch_failed|403/i.test(String(officialReason || ""))) {
+    bits.unshift("titan.co.in HTML fetch blocked (Cloudflare)");
+  }
+  const attemptSummary = Object.entries(retailerAttempts || {})
+    .map(([id, a]) => `${id}:${(a && a.status) || "?"}`)
+    .join(", ");
+  if (attemptSummary) bits.push(`retailers [${attemptSummary}]`);
+  return bits.join(" — ");
+}
+
 async function enrichSku(sku, options = {}) {
   const originalRequest = String(sku || "").trim();
   const normalized = normalizeSku(sku);
@@ -1133,33 +1257,50 @@ async function enrichSku(sku, options = {}) {
       }
     : null;
 
-  try {
-    return await enrichSkuOnce(sku, options, nearMetaFromTypo);
-  } catch (err) {
-    const failStatus = err.code || "error";
-    const baseFail = {
-      status: failStatus,
+  if (
+    options.collectiveOnly ||
+    options.tataCliqOnly ||
+    options.tgtLuxeOnly ||
+    options.ethosOnly
+  ) {
+    const { product, attempts } = await enrichFromRetailerFallback(sku, options);
+    if (product && product.status === "ok") return product;
+    return {
+      status: "not_found",
       sku: imsSkuForOutput(sku, normalized),
       brand: BRAND,
       source: SOURCE_OFFICIAL,
-      reason: err.message,
-      sourceUrl: err.sourceUrl || null,
+      reason: softMissReason("retailer-only scrape failed", attempts),
+      retailerAttempts: attempts,
+      sourceUrl: null,
       scrapedAt: new Date().toISOString(),
       imsSku: originalRequest,
     };
+  }
 
-    // Only run near-match discovery on miss / fetch walls (not on map bugs)
-    if (
-      options.skipNearMatch ||
-      (failStatus !== "not_found" && failStatus !== "fetch_failed")
-    ) {
-      return baseFail;
-    }
+  let officialErr = null;
+  try {
+    return await enrichSkuOnce(sku, options, nearMetaFromTypo);
+  } catch (err) {
+    officialErr = err;
+  }
 
+  const failStatus = (officialErr && officialErr.code) || "error";
+  let nearMatchCandidates = null;
+  let nearMatchNote = null;
+  let matchedStyle = null;
+
+  // Near-match discovery on miss / fetch walls (not on map bugs)
+  if (
+    !options.skipNearMatch &&
+    (failStatus === "not_found" || failStatus === "fetch_failed")
+  ) {
     try {
       const discovery = await discoverNearMatch(originalRequest, options);
+      nearMatchCandidates = discovery.candidates;
+      nearMatchNote = discovery.note;
       if (discovery.accepted) {
-        const matchedStyle = discovery.accepted.style;
+        matchedStyle = discovery.accepted.style;
         const nearMeta = {
           nearMatch: true,
           matchedStyle,
@@ -1174,61 +1315,102 @@ async function enrichSku(sku, options = {}) {
               .replace(/^NU/i, ""),
         };
         try {
-          const product = await enrichSkuOnce(
+          return await enrichSkuOnce(
             matchedStyle,
             {
               ...options,
-              // Avoid infinite near-match recursion on the matched style
               skipNearMatch: true,
               officialUrl:
                 discovery.accepted.url || options.officialUrl || null,
             },
             nearMeta
           );
-          return product;
         } catch (innerErr) {
-          return {
-            ...baseFail,
-            status: innerErr.code || "not_found",
-            reason: `near_match_accepted_${matchedStyle}_but_scrape_failed: ${innerErr.message}`,
-            nearMatchCandidates: discovery.candidates,
-            nearMatchNote: discovery.note,
+          officialErr = innerErr;
+          // Continue to retailers / catalog with matched style
+          const catalog = await enrichFromCatalogCdn(
             matchedStyle,
-          };
+            {
+              ...options,
+              officialUrl:
+                discovery.accepted.url || options.officialUrl || null,
+            },
+            nearMeta
+          );
+          if (catalog) return catalog;
         }
       }
-
-      const reasonBits = [err.message];
-      if (discovery.candidates && discovery.candidates.length) {
-        reasonBits.push("near-match candidates listed; none auto-accepted");
-      } else if (
-        discovery.note &&
-        /TWEG\*/i.test(discovery.note)
-      ) {
-        reasonBits.push(
-          "TWEG* SKUs are Timex India model numbers, not on titan.co.in"
-        );
-      }
-      return {
-        ...baseFail,
-        nearMatchCandidates: discovery.candidates,
-        nearMatchNote: discovery.note,
-        reason: reasonBits.join(" — "),
-      };
     } catch (discoverErr) {
-      return {
-        ...baseFail,
-        nearMatchNote: discoverErr.message,
-      };
+      nearMatchNote = discoverErr.message;
     }
   }
+
+  let retailerAttempts = null;
+  if (
+    !options.skipRetailerFallback &&
+    OFFICIAL_FAIL_CODES.has(failStatus)
+  ) {
+    const { product, attempts } = await enrichFromRetailerFallback(sku, options);
+    retailerAttempts = attempts;
+    if (product && product.status === "ok") return product;
+  }
+
+  // Catalog CDN often works when CF blocks HTML — recover gallery at least
+  if (OFFICIAL_FAIL_CODES.has(failStatus)) {
+    const catalog = await enrichFromCatalogCdn(
+      matchedStyle || sku,
+      options,
+      matchedStyle
+        ? {
+            nearMatch: true,
+            matchedStyle,
+            imsSku: originalRequest,
+            confidence: "high",
+            nearMatchMethod: "near_match_then_catalog",
+          }
+        : nearMetaFromTypo
+    );
+    if (catalog) return catalog;
+  }
+
+  const reasonBits = [
+    softMissReason(officialErr && officialErr.message, retailerAttempts),
+  ];
+  if (nearMatchCandidates && nearMatchCandidates.length) {
+    reasonBits.push("near-match candidates listed; none auto-accepted");
+  } else if (nearMatchNote && /TWEG\*/i.test(nearMatchNote)) {
+    reasonBits.push(
+      "TWEG* SKUs are Timex India model numbers, not on titan.co.in"
+    );
+  }
+
+  return {
+    status: failStatus === "fetch_failed" ? "not_found" : failStatus,
+    sku: imsSkuForOutput(sku, normalized),
+    brand: BRAND,
+    source: SOURCE_OFFICIAL,
+    reason: reasonBits.join(" — "),
+    sourceUrl: (officialErr && officialErr.sourceUrl) || null,
+    scrapedAt: new Date().toISOString(),
+    imsSku: originalRequest,
+    nearMatchCandidates,
+    nearMatchNote,
+    matchedStyle: matchedStyle || undefined,
+    retailerAttempts: retailerAttempts || undefined,
+  };
 }
 
 module.exports = {
   BRAND,
   SITE_ORIGIN,
   SOURCE_OFFICIAL,
+  SOURCE_COLLECTIVE,
+  SOURCE_TATA,
+  SOURCE_TGT,
+  SOURCE_ETHOS,
   CATALOG_IMAGE_BASE,
+  REF_URLS,
+  REF_CATALOG_META,
   ATTR_MAP,
   SKU_TYPO_MAP,
   SKU_TYPO_ALIASES,
@@ -1244,6 +1426,8 @@ module.exports = {
   mapProduct,
   resolveProductUrl,
   fetchProductHtml,
+  enrichFromRetailerFallback,
+  enrichFromCatalogCdn,
   enrichSku,
   looksLikeProductHtml,
   levenshtein,
