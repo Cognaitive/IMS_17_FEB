@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import { AuthContext } from '../context/AuthContext'
 import { useDebounce } from '../hooks/useDebounce'
+import { useIsMobile } from '../hooks/useMediaQuery'
 import { useProducts, useBrands, productKeys } from '../hooks/useProducts'
 import { pullProductEnrichment, publishProduct } from '../services/productService'
 import { getDisplayBrand } from '../utils/brandUtils'
@@ -15,6 +16,8 @@ import { getImageUrls, getThumbnailUrl } from '../utils/imageUtils'
 import ProductThumbnail from '../components/ProductThumbnail'
 import ProductModal from '../components/ProductModal'
 import PaginationBar from '../components/PaginationBar'
+import MobileHeader from '../components/mobile/MobileHeader'
+import MobilePagination from '../components/mobile/MobilePagination'
 import './NewListings.css'
 
 const SHORT_DESCRIPTION_CHARS = 40
@@ -41,33 +44,42 @@ function getMissingFields(product) {
   return missing
 }
 
+function isReadyToConfirm(product) {
+  const title = (product?.title || '').trim()
+  return Boolean(title) && countImages(product) > 0
+}
+
 const NewListings = () => {
-  const { user } = useContext(AuthContext)
+  const { user, logout } = useContext(AuthContext)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const isMobile = useIsMobile()
   const [filters, setFilters] = useState({
     search: '',
     brand: '',
     missingImages: false,
     missingDescription: false,
+    readyToConfirm: false,
     page: 1,
   })
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('edit')
   const [busyId, setBusyId] = useState(null)
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
 
   const debouncedSearch = useDebounce(filters.search, 500)
 
   const queryFilters = useMemo(
     () => ({
       page: filters.page,
-      limit: 50,
+      limit: isMobile ? 20 : 50,
       isPublished: false,
       brand: filters.brand || undefined,
       search: debouncedSearch || undefined,
       missingImages: filters.missingImages ? '1' : undefined,
       missingDescription: filters.missingDescription ? '1' : undefined,
+      readyToConfirm: filters.readyToConfirm ? '1' : undefined,
       sortBy: 'createdAt',
       sortOrder: 'desc',
     }),
@@ -76,7 +88,9 @@ const NewListings = () => {
       filters.brand,
       filters.missingImages,
       filters.missingDescription,
+      filters.readyToConfirm,
       debouncedSearch,
+      isMobile,
     ]
   )
 
@@ -86,13 +100,14 @@ const NewListings = () => {
   const products = productsData?.data || []
   const pagination = productsData?.pagination || {
     page: 1,
-    limit: 50,
+    limit: isMobile ? 20 : 50,
     total: 0,
     pages: 0,
   }
   const listingMeta = productsData?.listingMeta || {
     unpublishedTotal: pagination.total,
     missingImagesCount: 0,
+    readyToConfirmCount: 0,
   }
 
   const brands = useMemo(() => {
@@ -121,12 +136,40 @@ const NewListings = () => {
     role !== 'staff' || user?.canEditProducts !== false
   const canEditSeo = isOwner || user?.canEditSeo !== false
 
+  const hasActiveFilters =
+    Boolean(filters.brand) ||
+    filters.missingImages ||
+    filters.missingDescription ||
+    filters.readyToConfirm ||
+    Boolean(filters.search)
+
   const invalidateListings = () => {
     queryClient.invalidateQueries({ queryKey: productKeys.lists() })
   }
 
   const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value, page: 1 }))
+    setFilters((prev) => {
+      const next = { ...prev, [key]: value, page: 1 }
+      // Ready vs missing-images are mutually exclusive views
+      if (key === 'readyToConfirm' && value) {
+        next.missingImages = false
+      }
+      if (key === 'missingImages' && value) {
+        next.readyToConfirm = false
+      }
+      return next
+    })
+  }
+
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      brand: '',
+      missingImages: false,
+      missingDescription: false,
+      readyToConfirm: false,
+      page: 1,
+    })
   }
 
   const handleEdit = (product) => {
@@ -201,6 +244,368 @@ const NewListings = () => {
 
   const loading = isLoading && products.length === 0
 
+  const renderActionButtons = (product, { stacked = false } = {}) => {
+    const enrichable = isEnrichableProduct(product)
+    const scanning = busyId === `scan-${product._id}`
+    const publishing = busyId === `pub-${product._id}`
+    const ready = isReadyToConfirm(product)
+    return (
+      <div className={`nl-action-group${stacked ? ' stacked' : ''}`}>
+        {canEdit ? (
+          <button
+            type="button"
+            className="nl-edit-btn"
+            onClick={() => handleEdit(product)}
+          >
+            Edit
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="nl-edit-btn secondary"
+            onClick={() => handleView(product)}
+          >
+            View
+          </button>
+        )}
+        {enrichable && canEdit && (
+          <button
+            type="button"
+            className="nl-edit-btn scan"
+            disabled={!!busyId}
+            onClick={() => handleGetDetails(product)}
+            aria-label={
+              scanning ? 'Getting product details' : 'Get details from brand site'
+            }
+            title="Get details (does not publish)"
+          >
+            {scanning ? 'Getting…' : 'Get details'}
+          </button>
+        )}
+        {canPublish && (
+          <button
+            type="button"
+            className={`nl-edit-btn publish${ready ? ' emphasize' : ''}`}
+            disabled={!!busyId}
+            onClick={() => handleApprovePublish(product)}
+            title="Approve & go live — sets isPublished immediately (sold-out OK)"
+          >
+            {publishing ? 'Publishing…' : 'Approve & go live'}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const renderNeedsChips = (product) => {
+    const missing = getMissingFields(product)
+    const ready = isReadyToConfirm(product)
+    return (
+      <div className="nl-chips">
+        {ready && missing.length === 0 ? (
+          <span className="nl-chip ok">ready to confirm</span>
+        ) : ready ? (
+          <>
+            <span className="nl-chip ok">ready to confirm</span>
+            {missing.map((field) => (
+              <span key={field} className={`nl-chip ${field}`}>
+                {field}
+              </span>
+            ))}
+          </>
+        ) : missing.length === 0 ? (
+          <span className="nl-chip ok">ready to publish*</span>
+        ) : (
+          missing.map((field) => (
+            <span key={field} className={`nl-chip ${field}`}>
+              {field}
+            </span>
+          ))
+        )}
+      </div>
+    )
+  }
+
+  const filterControls = (
+    <>
+      <input
+        type="text"
+        placeholder="Search brand, SKU, title..."
+        value={filters.search}
+        onChange={(e) => handleFilterChange('search', e.target.value)}
+        className="filter-input search-input"
+      />
+      <select
+        value={filters.brand}
+        onChange={(e) => handleFilterChange('brand', e.target.value)}
+        className="filter-select"
+      >
+        <option value="">All Brands</option>
+        {brands.map((brand) => (
+          <option key={brand} value={brand}>
+            {getDisplayBrand(brand)}
+          </option>
+        ))}
+      </select>
+      <label className={`filter-chip${filters.readyToConfirm ? ' active' : ''}`}>
+        <input
+          type="checkbox"
+          checked={filters.readyToConfirm}
+          onChange={(e) =>
+            handleFilterChange('readyToConfirm', e.target.checked)
+          }
+        />
+        Ready to confirm
+      </label>
+      <label className={`filter-toggle${filters.missingImages ? ' active' : ''}`}>
+        <input
+          type="checkbox"
+          checked={filters.missingImages}
+          onChange={(e) =>
+            handleFilterChange('missingImages', e.target.checked)
+          }
+        />
+        Missing images
+      </label>
+      <label className={`filter-toggle${filters.missingDescription ? ' active' : ''}`}>
+        <input
+          type="checkbox"
+          checked={filters.missingDescription}
+          onChange={(e) =>
+            handleFilterChange('missingDescription', e.target.checked)
+          }
+        />
+        Thin / missing description
+      </label>
+      {hasActiveFilters && (
+        <button type="button" className="nl-clear-filters" onClick={clearFilters}>
+          Clear
+        </button>
+      )}
+    </>
+  )
+
+  const countsBlock = (
+    <div className="new-listings-counts">
+      <button
+        type="button"
+        className={`count-item clickable${!filters.readyToConfirm && !filters.missingImages ? ' active' : ''}`}
+        onClick={() =>
+          setFilters((prev) => ({
+            ...prev,
+            readyToConfirm: false,
+            missingImages: false,
+            page: 1,
+          }))
+        }
+      >
+        <span className="count-value">{listingMeta.unpublishedTotal ?? 0}</span>
+        <span className="count-label">Unpublished</span>
+      </button>
+      <button
+        type="button"
+        className={`count-item clickable ready${filters.readyToConfirm ? ' active' : ''}`}
+        onClick={() => handleFilterChange('readyToConfirm', !filters.readyToConfirm)}
+      >
+        <span className="count-value">{listingMeta.readyToConfirmCount ?? 0}</span>
+        <span className="count-label">Ready to confirm</span>
+      </button>
+      <button
+        type="button"
+        className={`count-item clickable${filters.missingImages ? ' active' : ''}`}
+        onClick={() => handleFilterChange('missingImages', !filters.missingImages)}
+      >
+        <span className="count-value">{listingMeta.missingImagesCount ?? 0}</span>
+        <span className="count-label">Missing images</span>
+      </button>
+      <div className="count-item">
+        <span className="count-value">{pagination.total ?? 0}</span>
+        <span className="count-label">Showing</span>
+      </div>
+    </div>
+  )
+
+  const productModal = showModal ? (
+    <ProductModal
+      product={selectedProduct}
+      mode={modalMode}
+      onClose={handleModalClose}
+      onSave={() => {
+        handleModalClose()
+        invalidateListings()
+      }}
+      brands={brands}
+      isOwner={isOwner}
+      canEditSeo={canEditSeo}
+      canPublish={canPublish}
+      onGetDetails={
+        selectedProduct &&
+        isEnrichableProduct(selectedProduct) &&
+        canEdit
+          ? () => handleGetDetails(selectedProduct)
+          : undefined
+      }
+      onApprovePublish={
+        canPublish && selectedProduct
+          ? () => handleApprovePublish(selectedProduct)
+          : undefined
+      }
+      enrichmentBusy={busyId}
+    />
+  ) : null
+
+  // —— Mobile layout (card stack) ——
+  if (isMobile) {
+    return (
+      <div className="new-listings-page mobile">
+        <MobileHeader
+          user={user}
+          onLogout={logout}
+          onCreateProduct={() => navigate('/dashboard')}
+          onExportCSV={() => {}}
+          onImportCSV={() => {}}
+        />
+        <div className="nl-mobile-top">
+          <button
+            type="button"
+            className="nl-mobile-back"
+            onClick={() => navigate('/dashboard')}
+          >
+            ← Dashboard
+          </button>
+          <h1>New listings</h1>
+          <p>Fill official info, then Approve &amp; go live</p>
+        </div>
+
+        {countsBlock}
+
+        <div className="nl-mobile-search-row">
+          <input
+            type="search"
+            placeholder="Search brand, SKU, title..."
+            value={filters.search}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
+            className="filter-input search-input"
+          />
+          <button
+            type="button"
+            className={`nl-mobile-filter-btn${hasActiveFilters ? ' active' : ''}`}
+            onClick={() => setShowMobileFilters(true)}
+          >
+            Filters
+          </button>
+        </div>
+
+        {filters.readyToConfirm && (
+          <div className="nl-active-pill-row">
+            <span className="nl-active-pill">Ready to confirm</span>
+            <button type="button" onClick={() => handleFilterChange('readyToConfirm', false)}>
+              ×
+            </button>
+          </div>
+        )}
+
+        <div className="nl-mobile-list">
+          {loading ? (
+            <div className="new-listings-loading">Loading...</div>
+          ) : products.length === 0 ? (
+            <div className="new-listings-empty">
+              No unpublished products match these filters.
+            </div>
+          ) : (
+            products.map((product, index) => {
+              const serial =
+                (pagination.page - 1) * pagination.limit + index + 1
+              const imgCount = countImages(product)
+              const ready = isReadyToConfirm(product)
+              return (
+                <article
+                  key={product._id}
+                  className={`nl-mobile-card${ready ? ' ready' : ''}`}
+                >
+                  <div className="nl-mobile-card-top">
+                    <ProductThumbnail
+                      product={product}
+                      alt={product.title || product.brand || 'Product'}
+                      size={64}
+                      onClick={() => handleView(product)}
+                    />
+                    <div className="nl-mobile-card-info">
+                      <div className="nl-mobile-card-brand">
+                        <span className="nl-serial">#{serial}</span>{' '}
+                        {getDisplayBrand(product.brand) || '—'}
+                      </div>
+                      <div className="nl-mobile-card-sku">{product.sku || '—'}</div>
+                      <div className="nl-mobile-card-title">
+                        {product.title || (
+                          <span className="nl-muted">No title</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="nl-mobile-card-meta">
+                    <span>Inv {product.inventory ?? 0}</span>
+                    <span>{formatCurrency(product.price)}</span>
+                    <span className={imgCount === 0 ? 'nl-img-count empty' : ''}>
+                      {imgCount} img{imgCount === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div className="nl-mobile-card-needs">{renderNeedsChips(product)}</div>
+                  <div className="nl-mobile-card-actions">
+                    {renderActionButtons(product, { stacked: true })}
+                  </div>
+                </article>
+              )
+            })
+          )}
+        </div>
+
+        {pagination.pages > 0 && (
+          <MobilePagination
+            page={pagination.page}
+            totalPages={pagination.pages}
+            onPageChange={(page) => setFilters((prev) => ({ ...prev, page }))}
+          />
+        )}
+
+        {showMobileFilters && (
+          <div
+            className="nl-filter-sheet-overlay"
+            onClick={() => setShowMobileFilters(false)}
+          >
+            <div
+              className="nl-filter-sheet"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="nl-filter-sheet-header">
+                <h2>Filters</h2>
+                <button type="button" onClick={() => setShowMobileFilters(false)}>
+                  ×
+                </button>
+              </div>
+              <div className="nl-filter-sheet-body">{filterControls}</div>
+              <div className="nl-filter-sheet-footer">
+                <button type="button" className="nl-clear-filters" onClick={clearFilters}>
+                  Clear all
+                </button>
+                <button
+                  type="button"
+                  className="nl-edit-btn publish"
+                  onClick={() => setShowMobileFilters(false)}
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {productModal}
+      </div>
+    )
+  }
+
+  // —— Desktop / tablet ——
   return (
     <div className="new-listings-page">
       <div className="new-listings-header">
@@ -218,7 +623,7 @@ const NewListings = () => {
         <div className="page-title-section">
           <h1>New listings</h1>
           <p className="page-subtitle">
-            Products not live on the storefront — fill in official info and images
+            Products not live on the storefront — enrich first, then Approve &amp; go live
           </p>
         </div>
         <div className="header-actions">
@@ -240,63 +645,10 @@ const NewListings = () => {
         </div>
       </div>
 
-      <div className="new-listings-counts">
-        <div className="count-item">
-          <span className="count-value">{listingMeta.unpublishedTotal ?? 0}</span>
-          <span className="count-label">Unpublished</span>
-        </div>
-        <div className="count-item">
-          <span className="count-value">{listingMeta.missingImagesCount ?? 0}</span>
-          <span className="count-label">Missing images</span>
-        </div>
-        <div className="count-item">
-          <span className="count-value">{pagination.total ?? 0}</span>
-          <span className="count-label">Showing</span>
-        </div>
-      </div>
+      {countsBlock}
 
       <div className="new-listings-filters">
-        <div className="filters-row">
-          <input
-            type="text"
-            placeholder="Search brand, SKU, title..."
-            value={filters.search}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
-            className="filter-input search-input"
-          />
-          <select
-            value={filters.brand}
-            onChange={(e) => handleFilterChange('brand', e.target.value)}
-            className="filter-select"
-          >
-            <option value="">All Brands</option>
-            {brands.map((brand) => (
-              <option key={brand} value={brand}>
-                {getDisplayBrand(brand)}
-              </option>
-            ))}
-          </select>
-          <label className="filter-toggle">
-            <input
-              type="checkbox"
-              checked={filters.missingImages}
-              onChange={(e) =>
-                handleFilterChange('missingImages', e.target.checked)
-              }
-            />
-            Missing images
-          </label>
-          <label className="filter-toggle">
-            <input
-              type="checkbox"
-              checked={filters.missingDescription}
-              onChange={(e) =>
-                handleFilterChange('missingDescription', e.target.checked)
-              }
-            />
-            Thin / missing description
-          </label>
-        </div>
+        <div className="filters-row">{filterControls}</div>
       </div>
 
       <div className="new-listings-table-wrap">
@@ -321,15 +673,15 @@ const NewListings = () => {
             </div>
             <div className="nl-table-body">
               {products.map((product, index) => {
-                const missing = getMissingFields(product)
                 const imgCount = countImages(product)
                 const serial =
                   (pagination.page - 1) * pagination.limit + index + 1
-                const enrichable = isEnrichableProduct(product)
-                const scanning = busyId === `scan-${product._id}`
-                const publishing = busyId === `pub-${product._id}`
+                const ready = isReadyToConfirm(product)
                 return (
-                  <div key={product._id} className="nl-table-row">
+                  <div
+                    key={product._id}
+                    className={`nl-table-row${ready ? ' ready' : ''}`}
+                  >
                     <div className="nl-cell image">
                       <ProductThumbnail
                         product={product}
@@ -344,10 +696,7 @@ const NewListings = () => {
                     <div className="nl-cell sku" title={product.sku}>
                       {product.sku || '—'}
                     </div>
-                    <div
-                      className="nl-cell title"
-                      title={product.title || ''}
-                    >
+                    <div className="nl-cell title" title={product.title || ''}>
                       <span className="nl-serial">{serial}.</span>{' '}
                       {product.title || (
                         <span className="nl-muted">No title</span>
@@ -368,61 +717,9 @@ const NewListings = () => {
                         {imgCount}
                       </span>
                     </div>
-                    <div className="nl-cell missing">
-                      <div className="nl-chips">
-                        {missing.length === 0 ? (
-                          <span className="nl-chip ok">ready to publish*</span>
-                        ) : (
-                          missing.map((field) => (
-                            <span key={field} className={`nl-chip ${field}`}>
-                              {field}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </div>
+                    <div className="nl-cell missing">{renderNeedsChips(product)}</div>
                     <div className="nl-cell actions">
-                      <div className="nl-action-group">
-                        {canEdit ? (
-                          <button
-                            type="button"
-                            className="nl-edit-btn"
-                            onClick={() => handleEdit(product)}
-                          >
-                            Edit
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="nl-edit-btn secondary"
-                            onClick={() => handleView(product)}
-                          >
-                            View
-                          </button>
-                        )}
-                        {enrichable && canEdit && (
-                          <button
-                            type="button"
-                            className="nl-edit-btn scan"
-                            disabled={!!busyId}
-                            onClick={() => handleGetDetails(product)}
-                            title="Get details from brand site (fill empty fields only; does not publish)"
-                          >
-                            {scanning ? 'Getting…' : 'Get details'}
-                          </button>
-                        )}
-                        {canPublish && (
-                          <button
-                            type="button"
-                            className="nl-edit-btn publish"
-                            disabled={!!busyId}
-                            onClick={() => handleApprovePublish(product)}
-                            title="Approve & go live — sets isPublished immediately (sold-out OK)"
-                          >
-                            {publishing ? 'Publishing…' : 'Approve & go live'}
-                          </button>
-                        )}
-                      </div>
+                      {renderActionButtons(product)}
                     </div>
                   </div>
                 )
@@ -445,41 +742,15 @@ const NewListings = () => {
       )}
 
       <p className="nl-footnote">
-        * “Ready to publish” means images, description, brand, SKU, price, and SEO
-        look filled in. <strong>Approve &amp; go live</strong> (owner/admin) sets{' '}
-        <code>isPublished</code> immediately — sold-out (inventory 0) is OK.{' '}
-        <strong>Get details</strong> (Balmain / Titan / Timex / Tissot / Fossil / Casio / Seiko / Longines / Rado / Emporio Armani) fills empty fields
-        only and never publishes (scrape ≠ approve; staff data wins).
+        <strong>Ready to confirm</strong> = unpublished with a title and at least one
+        image (batch enrichment applied). Use <strong>Approve &amp; go live</strong>{' '}
+        (owner/admin) to publish — sold-out (inventory 0) is OK.{' '}
+        <strong>Get details</strong> fills empty fields only and never publishes
+        (scrape ≠ approve; staff data wins). Rows without enrichment stay blank until
+        you pull details or a batch is applied.
       </p>
 
-      {showModal && (
-        <ProductModal
-          product={selectedProduct}
-          mode={modalMode}
-          onClose={handleModalClose}
-          onSave={() => {
-            handleModalClose()
-            invalidateListings()
-          }}
-          brands={brands}
-          isOwner={isOwner}
-          canEditSeo={canEditSeo}
-          canPublish={canPublish}
-          onGetDetails={
-            selectedProduct &&
-            isEnrichableProduct(selectedProduct) &&
-            canEdit
-              ? () => handleGetDetails(selectedProduct)
-              : undefined
-          }
-          onApprovePublish={
-            canPublish && selectedProduct
-              ? () => handleApprovePublish(selectedProduct)
-              : undefined
-          }
-          enrichmentBusy={busyId}
-        />
-      )}
+      {productModal}
     </div>
   )
 }
