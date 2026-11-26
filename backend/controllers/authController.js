@@ -129,8 +129,10 @@ const login = async (req, res) => {
 // @access  Private
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    res.json({
+    // When view-as is active, req.realUser is the owner/admin and req.user is overlaid
+    const actor = req.realUser || req.user;
+    const user = await User.findById(actor._id || actor.id);
+    const payload = {
       success: true,
       user: {
         id: user._id,
@@ -146,7 +148,26 @@ const getMe = async (req, res) => {
         canEditSeo: user.canEditSeo ?? true,
         canAccessFilters: user.canAccessFilters ?? true,
       },
-    });
+    };
+
+    if (req.viewAsStaff) {
+      const staff = req.viewAsStaff;
+      payload.viewAs = {
+        id: staff._id,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
+        allowedBrands: staff.allowedBrands || [],
+        canEditProducts: staff.canEditProducts ?? true,
+        canViewStats: staff.canViewStats ?? true,
+        canEditBasicInfo: staff.canEditBasicInfo ?? true,
+        canEditSeo: staff.canEditSeo ?? true,
+        canAccessFilters: staff.canAccessFilters ?? true,
+        hasSeoAccess: staff.hasSeoAccess || false,
+      };
+    }
+
+    res.json(payload);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

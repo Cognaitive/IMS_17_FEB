@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
+import ViewAsBanner from './components/ViewAsBanner'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
@@ -28,6 +29,7 @@ function App() {
       <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
       <Router>
         <div className="app">
+          <ViewAsBanner />
           <div className="app-main">
             <Routes>
               <Route path="/login" element={<Login />} />

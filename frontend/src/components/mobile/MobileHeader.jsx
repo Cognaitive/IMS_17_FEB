@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AuthContext } from '../../context/AuthContext'
+import ViewAsPicker from '../ViewAsPicker'
 import './MobileHeader.css'
 
 const MobileHeader = ({ user, onLogout, onCreateProduct, onExportCSV, onImportCSV }) => {
   const navigate = useNavigate()
+  const { canAccessMyStore, isViewAs, realUser } = useContext(AuthContext)
   const [menuOpen, setMenuOpen] = useState(false)
 
   const toggleMenu = () => {
@@ -86,18 +89,21 @@ const MobileHeader = ({ user, onLogout, onCreateProduct, onExportCSV, onImportCS
               <span className="menu-icon">📋</span>
               <span>Activity History</span>
             </button>
-            {['owner', 'admin'].includes(user?.role?.toLowerCase()) && (
+            {canAccessMyStore && (
               <button className="mobile-menu-item" onClick={() => handleMenuAction('mystore')}>
                 <span className="menu-icon">🏪</span>
                 <span style={{ fontWeight: 'bold' }}>My Store</span>
               </button>
             )}
-            {user?.role?.toLowerCase() === 'owner' && (
+            {!isViewAs && String(realUser?.role || '').toLowerCase() === 'owner' && (
               <button className="mobile-menu-item" onClick={() => handleMenuAction('staffs')}>
                 <span className="menu-icon">👥</span>
                 <span style={{ fontWeight: 'bold' }}>Staff Management</span>
               </button>
             )}
+            <div style={{ padding: '0.5rem 1rem' }}>
+              <ViewAsPicker />
+            </div>
             <div className="mobile-menu-divider"></div>
             <button className="mobile-menu-item logout" onClick={() => handleMenuAction('logout')}>
               <span className="menu-icon">🚪</span>

@@ -225,7 +225,8 @@ exports.markQueriesAsRead = async (req, res) => {
 exports.getStaffs = async (req, res) => {
   try {
     // Owner role can see ALL staff members, admin sees only their own created staff
-    const query = req.user.role === 'Owner'
+    const role = String(req.user.role || '').toLowerCase();
+    const query = role === 'owner'
       ? { role: { $in: ['staff', 'Staff'] } }
       : { parentId: req.user.id, role: { $in: ['staff', 'Staff'] } };
     const staffs = await User.find(query).select('-password').sort('-createdAt');
@@ -301,7 +302,8 @@ exports.updateStaff = async (req, res) => {
     }
 
     // Security check: Owner role can update any staff, admin can only update their own created staff
-    if (req.user.role !== 'Owner' && staff.parentId?.toString() !== req.user.id.toString()) {
+    const actorRole = String(req.user.role || '').toLowerCase();
+    if (actorRole !== 'owner' && staff.parentId?.toString() !== req.user.id.toString()) {
       return res.status(403).json({ success: false, message: "Unauthorized to update this staff member" });
     }
 
@@ -349,7 +351,8 @@ exports.deleteStaff = async (req, res) => {
     }
 
     // Security check: Owner role can delete any staff, admin can only delete their own created staff
-    if (req.user.role !== 'Owner' && staff.parentId?.toString() !== req.user.id.toString()) {
+    const actorRole = String(req.user.role || '').toLowerCase();
+    if (actorRole !== 'owner' && staff.parentId?.toString() !== req.user.id.toString()) {
       return res.status(403).json({ success: false, message: "Unauthorized to delete this staff member" });
     }
 

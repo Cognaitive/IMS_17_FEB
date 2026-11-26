@@ -34,9 +34,9 @@ const {
   replyToQuery
 } = require('../controllers/storeQueryController');
 
-// All routes are strictly protected and restricted to 'Owner'
+// Store admin: owner and admin (case-insensitive via authorize). Staff / view-as blocked upstream.
 router.use(protect);
-router.use(authorize('Owner', 'admin')); // Including 'admin' for flexibility as per user user context
+router.use(authorize('owner', 'admin'));
 
 // Dashboard
 router.route('/dashboard').get(getDashboardStats);

@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { applyViewAs } = require("./viewAs");
 
 const protect = async (req, res, next) => {
   let token;
@@ -15,7 +16,7 @@ const protect = async (req, res, next) => {
       if (!req.user) {
         return res.status(401).json({ message: "User not found" });
       }
-      next();
+      return applyViewAs(req, res, next);
     } catch (error) {
       return res.status(401).json({ message: "Not authorized" });
     }
@@ -41,14 +42,16 @@ const optionalAuth = async (req, res, next) => {
 
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!req.user || !req.user.role) {
+    // Prefer the real actor when view-as has overlaid staff permissions on req.user
+    const actor = req.realUser || req.user;
+    if (!actor || !actor.role) {
       return res.status(403).json({
         success: false,
         message: `User role is not authorized to access this route`,
       });
     }
 
-    const userRole = req.user.role.toLowerCase();
+    const userRole = actor.role.toLowerCase();
     const authorizedRoles = roles.map((role) => role.toLowerCase());
 
     if (!authorizedRoles.includes(userRole)) {

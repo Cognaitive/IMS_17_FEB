@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast'
 import { useDebounce } from '../hooks/useDebounce'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { AuthContext } from '../context/AuthContext'
+import ViewAsPicker from '../components/ViewAsPicker'
 import { getDisplayBrand } from '../utils/brandUtils'
 import {
   isEnrichableProduct,
@@ -61,7 +62,7 @@ import './Dashboard.css'
 import './MobileDashboard.css'
 
 const Dashboard = () => {
-  const { user, logout } = useContext(AuthContext)
+  const { user, realUser, logout, canAccessMyStore, isViewAs } = useContext(AuthContext)
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const queryClient = useQueryClient()
@@ -665,7 +666,7 @@ const Dashboard = () => {
             >
               Activity History
             </button>
-            {['owner', 'admin'].includes(user?.role?.toLowerCase()) && (
+            {canAccessMyStore && (
               <button
                 onClick={() => navigate('/my-store/orders')}
                 className="btn-my-store"
@@ -674,7 +675,7 @@ const Dashboard = () => {
                 My Store
               </button>
             )}
-            {user?.role?.toLowerCase() === 'owner' && (
+            {!isViewAs && String(realUser?.role || '').toLowerCase() === 'owner' && (
               <button
                 onClick={() => navigate('/my-store/staffs')}
                 className="btn-staff-management"
@@ -683,6 +684,7 @@ const Dashboard = () => {
                 Staff Management
               </button>
             )}
+            <ViewAsPicker />
             <span className="user-info">Welcome, {user?.name}</span>
             <button onClick={logout} className="logout-button">
               Logout

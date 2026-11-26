@@ -13,7 +13,7 @@ const api = axios.create({
   },
 })
 
-// Request interceptor (token)
+// Request interceptor (token + optional view-as staff preview)
 api.interceptors.request.use(
   (config) => {
     // Prefer long-lived token from localStorage, fall back to sessionStorage
@@ -23,6 +23,14 @@ api.interceptors.request.use(
         : null
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+    // Owner/admin read-only preview of a staff member's IMS scope
+    const viewAsId =
+      typeof window !== 'undefined' ? sessionStorage.getItem('viewAsStaffId') : null
+    if (viewAsId) {
+      config.headers['X-View-As-Staff-Id'] = viewAsId
+    } else if (config.headers) {
+      delete config.headers['X-View-As-Staff-Id']
     }
     return config
   },

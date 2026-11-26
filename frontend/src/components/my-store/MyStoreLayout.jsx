@@ -1,16 +1,18 @@
 import { useState, useEffect, useContext } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import { AuthContext } from '../../context/AuthContext';
 import storeAdminService from '../../services/storeAdminService';
 import { getStoreUrl } from '../../utils/storeUrl';
 import './MyStoreLayout.css';
 
 const MyStoreLayout = () => {
-  const { user, logout } = useContext(AuthContext);
+  const { user, realUser, logout, canAccessMyStore, isViewAs } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [counts, setCounts] = useState({ orders: 0, queries: 0, reviews: 0 });
+  const [redirecting, setRedirecting] = useState(!canAccessMyStore);
 
   const fetchCounts = async () => {
     try {
@@ -23,40 +25,48 @@ const MyStoreLayout = () => {
     }
   };
 
+  // Soft-redirect staff / view-as (and anyone without store admin) back to IMS
   useEffect(() => {
-    const isOwner = user?.role === 'Owner' || user?.role === 'owner';
-    if (isOwner) {
-      fetchCounts();
-      const interval = setInterval(fetchCounts, 30000); // 30 seconds
-      return () => clearInterval(interval);
+    if (canAccessMyStore) {
+      setRedirecting(false);
+      return;
     }
-  }, [user]);
+    setRedirecting(true);
+    const msg = isViewAs
+      ? 'My Store is hidden while viewing as staff. Exit view-as to manage the store.'
+      : 'You do not have permission to view the store administration panel.';
+    toast.error(msg);
+    navigate('/dashboard', { replace: true });
+  }, [canAccessMyStore, isViewAs, navigate]);
 
-  // If the user navigates away from Reviews, we might want to re-fetch, but interval is enough.
-  // Actually, whenever location changes, we can do a quick fetch to clear badges if they were read.
   useEffect(() => {
-    const isOwner = user?.role === 'Owner' || user?.role === 'owner';
-    if (isOwner) fetchCounts();
-  }, [location.pathname]);
+    if (!canAccessMyStore) return;
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 30000); // 30 seconds
+    return () => clearInterval(interval);
+  }, [canAccessMyStore]);
+
+  // Whenever location changes, quick-fetch to clear badges if they were read.
+  useEffect(() => {
+    if (canAccessMyStore) fetchCounts();
+  }, [location.pathname, canAccessMyStore]);
 
   // Close sidebar on navigation (mobile)
   const handleNavClick = () => {
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
-  const isOwner = user?.role === 'Owner' || user?.role === 'owner';
-  const isStaff = user?.role === 'staff' || user?.role === 'Staff';
-
-  // Strict protection: Only Owners can access this section
-  if (!isOwner) {
+  if (redirecting || !canAccessMyStore) {
     return (
-      <div className="unauthorized-access">
-        <h2>Unauthorized Access</h2>
-        <p>You do not have permission to view the store administration panel.</p>
-        <button onClick={() => navigate('/dashboard')}>Return to IMS</button>
+      <div className="unauthorized-access" style={{ opacity: 0.85 }}>
+        <p>Redirecting to IMS…</p>
       </div>
     );
   }
+
+  const actor = realUser || user;
+  const actorRole = String(actor?.role || '').toLowerCase();
+  const isOwner = actorRole === 'owner';
 
   const menuItems = [
     { name: 'Dashboard', path: '/my-store/dashboard' },
