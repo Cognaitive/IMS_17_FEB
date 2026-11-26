@@ -20,12 +20,22 @@ const ViewAsPicker = () => {
       setLoading(true)
       try {
         const res = await storeAdminService.getStaffs()
-        if (!cancelled && res.success) {
-          setStaffs(res.data || [])
+        if (cancelled) return
+        const list = Array.isArray(res?.data)
+          ? res.data
+          : Array.isArray(res)
+            ? res
+            : []
+        if (res?.success === false) {
+          console.error('Failed to load staff for view-as', res?.message)
+          setStaffs([])
+          return
         }
+        setStaffs(list)
       } catch (err) {
         if (!cancelled) {
           console.error('Failed to load staff for view-as', err)
+          setStaffs([])
         }
       } finally {
         if (!cancelled) setLoading(false)

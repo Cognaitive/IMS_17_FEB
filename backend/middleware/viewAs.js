@@ -47,17 +47,8 @@ const applyViewAs = async (req, res, next) => {
       });
     }
 
-    const actorRole = String(req.user.role || "").toLowerCase();
-    if (
-      actorRole === "admin" &&
-      staff.parentId?.toString() !== req.user._id.toString() &&
-      staff.parentId?.toString() !== req.user.id?.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized to view as this staff member",
-      });
-    }
+    // Owner and admin may preview any IMS staff (same scope as getStaffs).
+    // Mutations stay blocked above; staff create/update/delete remain parent-scoped.
 
     req.realUser = req.user;
     req.viewAsStaff = staff;
