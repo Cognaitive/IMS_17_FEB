@@ -63,6 +63,13 @@ const REF_CATALOG_META = {
     dialColor: "Purple",
     movement: "Quartz",
   },
+  "95375WM01F": {
+    title:
+      "Titan Raga Ethereal Quartz Analog Mother of Pearl Dial Rose Gold Stainless Steel Strap Watch For Women",
+    gender: "Female",
+    dialColor: "Mother of Pearl",
+    movement: "Quartz",
+  },
 };
 
 const SOFT_MISS_HINT =
@@ -78,6 +85,8 @@ const SKU_TYPO_MAP = {
   "9210QM01": "90210QM01",
   // IMS truncated "90" — Light Leathers IV multifunction green dial
   "134QL01": "90134QL01",
+  // IMS drops trailing F used on titan.co.in / Catalog CDN (Raga Ethereal etc.)
+  "95375WM01": "95375WM01F",
 };
 
 /**
@@ -457,9 +466,9 @@ function extractImages(html, style, ld) {
 }
 
 /**
- * When HTML has few/no images (trimmed fixture), synthesize known Catalog URLs
- * by probing _1…_N pattern is left to download step; here just build candidates
- * from style if HTML yielded nothing.
+ * When HTML has few/no images (trimmed fixture), synthesize known Catalog URLs.
+ * Prefer probeLiveCatalogImages() before writing to IMS — blind synthesize can
+ * invent 404 slots (e.g. IMS 95375WM01 vs Catalog 95375WM01F).
  */
 function synthesizeCatalogImages(style, count = 7) {
   const styleKey = String(style || "").toUpperCase();
@@ -467,6 +476,46 @@ function synthesizeCatalogImages(style, count = 7) {
   const out = [];
   for (let i = 1; i <= count; i++) {
     out.push(`${CATALOG_IMAGE_BASE}/${styleKey}_${i}.jpg`);
+  }
+  return out;
+}
+
+/** HEAD each Catalog slot; return only live JPEG URLs. */
+async function probeLiveCatalogImages(style, options = {}) {
+  const styleKey = String(style || "").toUpperCase();
+  if (!styleKey) return [];
+  const max = options.count || 8;
+  const out = [];
+  for (let i = 1; i <= max; i++) {
+    const url = `${CATALOG_IMAGE_BASE}/${styleKey}_${i}.jpg`;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(
+        () => controller.abort(),
+        options.timeoutMs || 10000
+      );
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "HEAD",
+          redirect: "follow",
+          signal: controller.signal,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            Accept: "image/jpeg,image/*;q=0.8,*/*;q=0.5",
+          },
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (res && res.ok) out.push(url);
+      else if (i === 1) return [];
+      else break;
+    } catch {
+      if (i === 1) return [];
+      break;
+    }
   }
   return out;
 }
@@ -1173,17 +1222,24 @@ async function enrichFromRetailerFallback(sku, options = {}) {
 async function enrichFromCatalogCdn(sku, options = {}, nearMeta = null) {
   if (options.skipCatalogFallback) return null;
   const normalized = normalizeSku(sku);
-  const style = normalized.style;
+  let style = normalized.style;
   if (!style) return null;
-  const exists = await catalogStyleExists(style, options);
-  if (!exists) return null;
 
-  const meta = REF_CATALOG_META[style] || {};
+  let images = await probeLiveCatalogImages(style, options);
+  // IMS often drops trailing F that titan.co.in Catalog uses (95375WM01 → 95375WM01F)
+  if (!images.length && !/F$/i.test(style)) {
+    const withF = `${style}F`;
+    images = await probeLiveCatalogImages(withF, options);
+    if (images.length) style = withF;
+  }
+  if (!images.length) return null;
+
+  const meta = REF_CATALOG_META[style] || REF_CATALOG_META[normalized.style] || {};
   const sourceUrl =
     options.officialUrl ||
     REF_URLS[style] ||
+    REF_URLS[normalized.style] ||
     `${SITE_ORIGIN}/product/${style.toLowerCase()}.html`;
-  const images = synthesizeCatalogImages(style, 7);
   const title =
     meta.title ||
     `Titan ${style}`;
@@ -1423,6 +1479,7 @@ module.exports = {
   extractJsonLdProduct,
   stabilizeCatalogUrl,
   synthesizeCatalogImages,
+  probeLiveCatalogImages,
   mapProduct,
   resolveProductUrl,
   fetchProductHtml,

@@ -23,9 +23,12 @@ import './NewListings.css'
 const SHORT_DESCRIPTION_CHARS = 40
 
 function countImages(product) {
-  const urls = getImageUrls(product)
+  // Count only http(s) URLs — empty/garbage slots should not inflate the badge
+  // or mark a listing "ready to confirm" when the gallery is effectively empty.
+  const urls = getImageUrls(product).filter((u) => /^https?:\/\//i.test(u))
   if (urls.length > 0) return urls.length
-  if (getThumbnailUrl(product)) return 1
+  const legacy = getThumbnailUrl(product)
+  if (legacy && /^https?:\/\//i.test(legacy)) return 1
   return 0
 }
 

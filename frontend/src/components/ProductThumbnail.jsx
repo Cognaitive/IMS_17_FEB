@@ -1,5 +1,5 @@
-import { memo, useState } from 'react'
-import { getThumbnailUrl, isValidImageUrl } from '../utils/imageUtils'
+import { memo, useEffect, useMemo, useState } from 'react'
+import { getImageUrls, getThumbnailUrl, isValidImageUrl } from '../utils/imageUtils'
 import './ProductThumbnail.css'
 
 const ProductThumbnail = memo(({ 
@@ -9,21 +9,36 @@ const ProductThumbnail = memo(({
   onClick,
   className = '' 
 }) => {
-  // Primary image for dashboard IMAGE column: images[0] (saved order) or image.url
-  const url = getThumbnailUrl(product)
+  // Try images[] in order; fall through on load error so one dead URL
+  // does not force the cardboard placeholder when later slots still work.
+  const candidates = useMemo(() => {
+    const urls = getImageUrls(product)
+    if (urls.length) return urls
+    const legacy = getThumbnailUrl(product)
+    return isValidImageUrl(legacy) ? [legacy] : []
+  }, [product])
+
+  const [urlIndex, setUrlIndex] = useState(0)
   const [imageLoaded, setImageLoaded] = useState(false)
-  const [imageError, setImageError] = useState(false)
+
+  useEffect(() => {
+    setUrlIndex(0)
+    setImageLoaded(false)
+  }, [candidates])
+
+  const url = candidates[urlIndex] || null
+  const exhausted = candidates.length === 0 || urlIndex >= candidates.length
 
   const handleImageLoad = () => {
     setImageLoaded(true)
   }
 
   const handleImageError = () => {
-    setImageError(true)
-    setImageLoaded(true)
+    setImageLoaded(false)
+    setUrlIndex((i) => i + 1)
   }
 
-  const hasImage = isValidImageUrl(url)
+  const hasImage = isValidImageUrl(url) && !exhausted
 
   return (
     <div 
@@ -34,7 +49,7 @@ const ProductThumbnail = memo(({
       tabIndex={onClick ? 0 : undefined}
       aria-label={onClick ? `View ${alt}` : undefined}
     >
-      {!hasImage || imageError ? (
+      {!hasImage ? (
         <div className="product-thumbnail-placeholder">
           <span className="placeholder-icon">📦</span>
         </div>
@@ -46,6 +61,7 @@ const ProductThumbnail = memo(({
             </div>
           )}
           <img
+            key={url}
             src={url}
             alt={alt}
             loading="lazy"
