@@ -63,7 +63,7 @@ const BRAND_BATCHES = [
     dirs: ["balmain-batch", "balmain-batch-archived"],
   },
   { id: "titan", brandRe: /^titan$/i, dirs: ["titan-batch"] },
-  { id: "timex", brandRe: /^timex$/i, dirs: ["timex-batch"] },
+  { id: "timex", brandRe: /^timex$/i, dirs: ["timex-batch", "timex-tw2y18500ik"] },
   { id: "tissot", brandRe: /^tissot$/i, dirs: ["tissot-batch"] },
   {
     id: "seiko",
@@ -119,7 +119,7 @@ const BRAND_BATCHES = [
   {
     id: "casio",
     brandRe: /^casio$/i,
-    dirs: ["casio-proof"],
+    dirs: ["casio-proof", "casio-recover-ed676-a2474"],
   },
 ];
 

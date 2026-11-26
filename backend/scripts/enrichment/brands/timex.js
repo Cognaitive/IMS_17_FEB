@@ -45,6 +45,17 @@ const SKU_TYPO_MAP = {
   TWFG26705: "TWEG26705",
 };
 
+/** Known official PDPs when predictive search / handle-guess miss (long Shopify slugs). */
+const REF_URLS = {
+  TW2Y18500IK:
+    "https://shop.timexindia.com/products/timex-waterbury-traditional-blue-round-dial-analog-mens-watch-tw2y18500ik",
+};
+
+const TATA_CLIQ_REF_URLS = {
+  TW2Y18500IK:
+    "https://luxury.tatacliq.com/timex-waterbury-traditional-blue-round-dial-analog-men-watch--tw2y18500ik/p-mp000000028955546",
+};
+
 /**
  * Conservative Timex near-match: region-suffix OCR/typo confusion.
  * IMS often stores LK / 1K / mixed-case lK when the India site uses IK.
@@ -216,6 +227,11 @@ async function resolveProductUrl(sku, options = {}) {
   if (options.officialUrl) return options.officialUrl;
 
   const normalized = normalizeSku(sku);
+  const refHit =
+    REF_URLS[normalized.compact] ||
+    REF_URLS[normalized.style] ||
+    null;
+  if (refHit) return refHit;
   const queries = [
     ...new Set(
       [normalized.compact, normalized.style, ...normalized.styleCandidates].filter(
@@ -629,6 +645,14 @@ async function enrichSku(sku, options = {}) {
     blockLabel: "shop.timexindia.com HTML fetch blocked",
     fixtureDir:
       options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+    tataCliqRefUrls: {
+      ...TATA_CLIQ_REF_URLS,
+      ...(options.tataCliqRefUrls || {}),
+    },
+    tataCliqUrl:
+      options.tataCliqUrl ||
+      TATA_CLIQ_REF_URLS[normalized.compact] ||
+      null,
   };
 
   if (
@@ -730,6 +754,8 @@ module.exports = {
   SOURCE_ETHOS,
   ATTR_MAP,
   SKU_TYPO_MAP,
+  REF_URLS,
+  TATA_CLIQ_REF_URLS,
   normalizeSku,
   skuMatchKeys,
   resolveSkuTypo,

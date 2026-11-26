@@ -18,6 +18,11 @@ const { enrichFromTataCliq, SOURCE_ID: TATA } = require("./tatacliq");
 const { enrichFromCollective, SOURCE_ID: COLLECTIVE } = require("./thecollective");
 const { enrichFromTgtLuxe, SOURCE_ID: TGT } = require("./tgtluxe");
 const { enrichFromEthos, SOURCE_ID: ETHOS } = require("./ethos");
+const {
+  enrichFromJustInTime,
+  SOURCE_ID: JUSTINTIME,
+  REF_URLS: JUSTINTIME_REF_URLS,
+} = require("./justintime");
 
 /** Known Tata Cliq Luxury PDPs for recent miss recoveries (compact SKU → URL). */
 const TATA_CLIQ_REF_URLS = {
@@ -71,6 +76,11 @@ const ETHOS_REF_URLS = {
 
 const PRESETS = {
   luxury: ["collective", "tatacliq", "tgtluxe", "ethos"],
+  /**
+   * Casio India codes (ED### / A####): insert Just In Time after Tata Cliq.
+   * Official casio.com is often CF/Akamai-blocked for Node.
+   */
+  casio: ["collective", "tatacliq", "justintime", "tgtluxe", "ethos"],
   /** Always keep Tata Cliq; Ethos last for misses. */
   armani: ["tatacliq", "ethos"],
   tatacliq_ethos: ["tatacliq", "ethos"],
@@ -122,6 +132,17 @@ function resolveTgtLuxeUrl(compact, options = {}) {
   );
 }
 
+function resolveJustInTimeUrl(compact, options = {}) {
+  return (
+    options.justInTimeUrl ||
+    options.jitUrl ||
+    (options.justInTimeRefUrls && options.justInTimeRefUrls[compact]) ||
+    (options.jitRefUrls && options.jitRefUrls[compact]) ||
+    JUSTINTIME_REF_URLS[compact] ||
+    null
+  );
+}
+
 function buildSteps(sku, options = {}) {
   const compact = compactSku(sku);
   const brandHint = options.brandHint || "Watch";
@@ -129,6 +150,17 @@ function buildSteps(sku, options = {}) {
   let order = Array.isArray(options.order)
     ? options.order.slice()
     : (PRESETS[preset] || PRESETS.luxury).slice();
+
+  // Casio brand hint → ensure Just In Time is in the chain after Tata Cliq.
+  if (
+    !options.skipJustInTime &&
+    /^casio$/i.test(String(brandHint)) &&
+    !order.includes("justintime")
+  ) {
+    const tataIdx = order.indexOf("tatacliq");
+    if (tataIdx >= 0) order.splice(tataIdx + 1, 0, "justintime");
+    else order.push("justintime");
+  }
 
   // Hard guarantee: Tata Cliq always present unless explicitly skipped.
   if (!options.skipTataCliq && !order.includes("tatacliq")) {
@@ -140,11 +172,13 @@ function buildSteps(sku, options = {}) {
   if (options.skipCollective) order = order.filter((s) => s !== "collective");
   if (options.skipTgtLuxe) order = order.filter((s) => s !== "tgtluxe");
   if (options.skipEthos) order = order.filter((s) => s !== "ethos");
+  if (options.skipJustInTime) order = order.filter((s) => s !== "justintime");
 
   if (options.collectiveOnly) order = ["collective"];
   if (options.tataCliqOnly) order = ["tatacliq"];
   if (options.tgtLuxeOnly) order = ["tgtluxe"];
   if (options.ethosOnly) order = ["ethos"];
+  if (options.justInTimeOnly || options.jitOnly) order = ["justintime"];
 
   const timeoutMs = options.timeoutMs;
   const steps = [];
@@ -173,6 +207,26 @@ function buildSteps(sku, options = {}) {
             timeoutMs,
             resolveBySku: options.resolveTataCliqBySku !== false,
             refUrls: { ...TATA_CLIQ_REF_URLS, ...(options.tataCliqRefUrls || {}) },
+          }),
+      });
+    } else if (id === "justintime") {
+      steps.push({
+        id: JUSTINTIME,
+        label: "Just In Time",
+        run: () =>
+          enrichFromJustInTime(compact, {
+            justInTimeUrl: resolveJustInTimeUrl(compact, options),
+            brandHint,
+            timeoutMs,
+            resolveBySku: options.resolveJustInTimeBySku !== false,
+            justInTimeRefUrls: {
+              ...JUSTINTIME_REF_URLS,
+              ...(options.justInTimeRefUrls || {}),
+              ...(options.jitRefUrls || {}),
+            },
+            model: options.model || null,
+            fixtureDir: options.fixtureDir || null,
+            preferFixture: options.preferFixture || false,
           }),
       });
     } else if (id === "tgtluxe") {
@@ -341,6 +395,7 @@ module.exports = {
   TATA_CLIQ_REF_URLS,
   TGT_LUXE_REF_URLS,
   ETHOS_REF_URLS,
+  JUSTINTIME_REF_URLS,
   OFFICIAL_FAIL_CODES,
   compactSku,
   buildSteps,
@@ -351,5 +406,6 @@ module.exports = {
   resolveTataUrl,
   resolveTgtLuxeUrl,
   resolveEthosUrl,
-  SOURCE: { TATA, COLLECTIVE, TGT, ETHOS },
+  resolveJustInTimeUrl,
+  SOURCE: { TATA, COLLECTIVE, TGT, ETHOS, JUSTINTIME },
 };

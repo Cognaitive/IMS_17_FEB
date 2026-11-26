@@ -20,7 +20,8 @@
  * Blockers: Akamai/CF on casio.com + India store for Node/curl. Save browser
  * HTML to fixtures/<INDIA_CODE>.html or fixtures/<MODEL>.html.
  *
- * On official miss/block: Collective → Tata Cliq Luxury → TGT Luxe → Ethos.
+ * On official miss/block:
+ *   Collective → Tata Cliq Luxury → Just In Time → TGT Luxe → Ethos
  */
 
 const path = require("path");
@@ -31,6 +32,7 @@ const {
   enrichFromRetailerChain,
   recoverAfterOfficialMiss,
   SOURCE: RETAILER_SOURCE,
+  JUSTINTIME_REF_URLS,
 } = require("../lib/retailerFallback");
 const {
   normalizeProductFields,
@@ -45,9 +47,10 @@ const SOURCE_COLLECTIVE = RETAILER_SOURCE.COLLECTIVE;
 const SOURCE_TATA = RETAILER_SOURCE.TATA;
 const SOURCE_TGT = RETAILER_SOURCE.TGT;
 const SOURCE_ETHOS = RETAILER_SOURCE.ETHOS;
+const SOURCE_JUSTINTIME = RETAILER_SOURCE.JUSTINTIME;
 
 const SOFT_MISS_HINT =
-  "Official Casio blocked or missing; retailer chain missed — save PDP HTML to fixtures/ or pass tatacliq_url";
+  "Official Casio blocked or missing; retailer chain missed — save PDP HTML to fixtures/ or pass justInTimeUrl / tatacliq_url";
 
 /** Common India-code → model overrides (expand as staff confirm). */
 const INDIA_CODE_TO_MODEL = {
@@ -55,6 +58,16 @@ const INDIA_CODE_TO_MODEL = {
   D195: "A1000MCG-9",
   G1736: "GBM-2100A-8B",
   A2429: "LTP-VT04D-2A",
+  A2474: "MTP-B190L-2BVDF",
+  ED676: "EFR-539DE-8AV",
+};
+
+/** Known official PDPs (India code → casio.com URL). Prefer over URL-guess. */
+const REF_URLS = {
+  ED676: "https://www.casio.com/in/watches/edifice/product.EFR-539DE-8AV/",
+  A2474: "https://www.casio.com/in/watches/casio/product.MTP-B190L-2BVDF/",
+  D275: "https://www.casio.com/us/watches/casio/product.AE-1500WHX-1AV/",
+  G1736: "https://www.casio.com/us/watches/gshock/product.GBM-2100A-8B/",
 };
 
 const ATTR_MAP = {
@@ -235,30 +248,37 @@ function extractImages(html, modelOrSku) {
   const key = String(modelOrSku || "")
     .toUpperCase()
     .replace(/[.\-_\s]/g, "");
-  const push = (raw, { requireKey = true } = {}) => {
+  const push = (raw, { requireKey = true, allowRetailer = false } = {}) => {
     if (!raw) return;
     let u = decodeEntities(String(raw).split("?")[0].trim());
     u = absUrl(u);
-    if (!/casio\.com|g-shock\.com|casiostore/i.test(u)) return;
+    const okHost =
+      /casio\.com|g-shock\.com|casiostore/i.test(u) ||
+      (allowRetailer &&
+        /kamalwatch|swisstimehouse|media-amazon|flipkart|shopify/i.test(u));
+    if (!okHost) return;
     if (!/\.(jpe?g|png|webp)$/i.test(u) && !/\/products?\//i.test(u)) return;
-    if (/logo|icon|sprite|banner|favicon/i.test(u)) return;
+    if (/logo|icon|sprite|banner|favicon|cookieyes|payment/i.test(u)) return;
     if (requireKey && key) {
       const up = u.toUpperCase().replace(/[.\-_\s]/g, "");
-      if (!up.includes(key)) return;
+      if (!up.includes(key) && !allowRetailer) return;
     }
     if (seen.has(u)) return;
     seen.add(u);
     urls.push(u);
   };
   const og = match1(html, /property=["']og:image["']\s+content=["']([^"']+)/i);
-  // og:image is page-scoped; keep even when CDN path omits model code
-  push(og, { requireKey: false });
+  // og:image is page-scoped; keep even when CDN path omits model code /
+  // fixture used a retailer PDP while official casio.com is CF-blocked.
+  push(og, { requireKey: false, allowRetailer: true });
   const all = String(html || "").match(
-    /https:\/\/[^"']+\.(?:jpe?g|png|webp)/gi
+    /https?:\/\/[^"'\s>]+\.(?:jpe?g|png|webp)/gi
   );
   if (all) {
     for (const u of all) {
-      if (/product|casio|gshock|watch/i.test(u)) push(u);
+      if (/product|casio|gshock|watch|edifice|mtp|efr/i.test(u)) {
+        push(u, { allowRetailer: /kamalwatch|swisstimehouse|media-amazon/i.test(u) });
+      }
     }
   }
   return urls.slice(0, 12);
@@ -294,7 +314,10 @@ function readFixtureHtml(filePath, officialUrl) {
 
 async function resolveProductUrl(sku, options = {}) {
   if (options.officialUrl) return options.officialUrl;
+  const { compact } = normalizeSku(sku);
+  if (REF_URLS[compact]) return REF_URLS[compact];
   const model = resolveModel(sku, options);
+  if (model && REF_URLS[compact]) return REF_URLS[compact];
   if (!model) return null;
   for (const url of modelUrlCandidates(model)) {
     try {
@@ -446,15 +469,21 @@ async function enrichFromRetailerFallback(sku, options = {}) {
   const { product, attempts } = await enrichFromRetailerChain(sku, {
     ...options,
     brandHint: BRAND,
-    preset: "luxury",
+    preset: "casio",
     fixtureDir:
       options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+    justInTimeRefUrls: {
+      ...JUSTINTIME_REF_URLS,
+      ...(options.justInTimeRefUrls || {}),
+    },
+    model: options.model || resolveModel(sku, options),
   });
   return { product, attempts };
 }
 
 async function enrichSku(sku, options = {}) {
   const normalized = normalizeSku(sku);
+  const model = resolveModel(sku, options);
   const recoverOpts = {
     ...options,
     brandHint: BRAND,
@@ -465,13 +494,26 @@ async function enrichSku(sku, options = {}) {
     blockLabel: "casio.com / India store blocked (CF/Akamai)",
     fixtureDir:
       options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+    preset: "casio",
+    model: options.model || model,
+    justInTimeUrl:
+      options.justInTimeUrl ||
+      options.jitUrl ||
+      JUSTINTIME_REF_URLS[normalized.compact] ||
+      null,
+    justInTimeRefUrls: {
+      ...JUSTINTIME_REF_URLS,
+      ...(options.justInTimeRefUrls || {}),
+    },
   };
 
   if (
     options.collectiveOnly ||
     options.tataCliqOnly ||
     options.tgtLuxeOnly ||
-    options.ethosOnly
+    options.ethosOnly ||
+    options.justInTimeOnly ||
+    options.jitOnly
   ) {
     return recoverAfterOfficialMiss(
       sku,
@@ -532,8 +574,11 @@ module.exports = {
   SOURCE_TATA,
   SOURCE_TGT,
   SOURCE_ETHOS,
+  SOURCE_JUSTINTIME,
   ATTR_MAP,
   INDIA_CODE_TO_MODEL,
+  REF_URLS,
+  JUSTINTIME_REF_URLS,
   normalizeSku,
   skuMatchKeys,
   extractModelFromText,
