@@ -66,7 +66,11 @@ const ViewAsPicker = () => {
         disabled={loading || staffs.length === 0}
       >
         <option value="">
-          {loading ? 'Loading staff…' : staffs.length === 0 ? 'No staff' : 'Select staff…'}
+          {loading
+            ? 'Loading staff…'
+            : staffs.length === 0
+              ? 'Myself (no staff accounts)'
+              : 'Myself'}
         </option>
         {staffs.map((s) => (
           <option key={s._id} value={s._id}>

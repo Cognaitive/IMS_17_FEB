@@ -225,12 +225,11 @@ exports.markQueriesAsRead = async (req, res) => {
 // --- STAFF MANAGEMENT ---
 exports.getStaffs = async (req, res) => {
   try {
-    // Owner sees all non-admin IMS users; admin sees only staff they created
-    const role = String(req.user.role || '').toLowerCase();
-    const query = role === 'owner'
-      ? { role: STAFF_ROLE_MONGO }
-      : { parentId: req.user.id, role: STAFF_ROLE_MONGO };
-    const staffs = await User.find(query).select('-password').sort('-createdAt');
+    // Owner and admin both list all IMS staff (My Staffs + view-as picker).
+    // Mutations stay scoped: admin may only update/delete staff they created.
+    const staffs = await User.find({ role: STAFF_ROLE_MONGO })
+      .select('-password')
+      .sort('-createdAt');
     res.status(200).json({ success: true, data: staffs });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

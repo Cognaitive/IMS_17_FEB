@@ -33,7 +33,9 @@ const isStaff = (user) => {
 };
 
 /** Mongo filter for staff accounts listed in My Staffs / view-as. */
-const STAFF_ROLE_MONGO = { $nin: ["owner", "Owner", "admin", "user"] };
+const STAFF_ROLE_MONGO = {
+  $nin: ["owner", "Owner", "admin", "Admin", "user"],
+};
 
 const canAccessBrand = (user, brand) => {
   if (!isStaff(user)) return true;
