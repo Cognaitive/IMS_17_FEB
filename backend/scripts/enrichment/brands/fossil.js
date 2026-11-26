@@ -6,15 +6,25 @@
  * URL pattern: https://www.fossil.in/products/{slug}/{SKU}.html
  * Example:     https://www.fossil.in/products/neutra-chronograph-amber-leather-watch/FS5512.html
  *
- * Akamai often blocks Node/curl (HTTP 403). Prefer --html fixtures/<SKU>.html
- * or --prefer-fixture. Images under img.fossil.in are usually reachable once
- * you have the PDP HTML / og:image URLs.
+ * Resolve order:
+ *   1. Fixture / --html (preferFixture)
+ *   2. Official fossil.in PDP (REF map → search; often Akamai-blocked for Node)
+ *   3. On official miss/block: Collective → Tata Cliq Luxury → TGT Luxe → Ethos
+ *      (Tata Cliq always kept unless skipTataCliq)
+ *
+ * Akamai blocks must not hard-fail Get details — fall through retailers.
+ * Prefer fixtures/<SKU>.html when available. Images under img.fossil.in are
+ * usually reachable once you have PDP HTML / og:image URLs.
  */
 
 const path = require("path");
 const fs = require("fs");
 const { fetchText, sleep } = require("../lib/http");
 const { buildSeo } = require("../lib/seo");
+const {
+  enrichFromRetailerChain,
+  SOURCE: RETAILER_SOURCE,
+} = require("../lib/retailerFallback");
 const {
   normalizeProductFields,
   normalizeCaseSize,
@@ -24,6 +34,36 @@ const {
 const BRAND = "Fossil";
 const SITE_ORIGIN = "https://www.fossil.in";
 const SOURCE_OFFICIAL = "fossil";
+const SOURCE_COLLECTIVE = RETAILER_SOURCE.COLLECTIVE;
+const SOURCE_TATA = RETAILER_SOURCE.TATA;
+const SOURCE_TGT = RETAILER_SOURCE.TGT;
+const SOURCE_ETHOS = RETAILER_SOURCE.ETHOS;
+
+const OFFICIAL_FAIL_CODES = new Set([
+  "not_found",
+  "fetch_failed",
+  "error",
+  "blocked",
+]);
+
+/** Known official fossil.in PDPs (compact SKU → URL). */
+const REF_URLS = {
+  FS5512:
+    "https://www.fossil.in/products/neutra-chronograph-amber-leather-watch/FS5512.html",
+  ES5498:
+    "https://www.fossil.in/products/harlow-three-hand-green-leather-and-rose-gold-tone-stainless-steel-watch/ES5498.html",
+  FS6187:
+    "https://www.fossil.in/products/machine-three-hand-date-brown-leather-watch/FS6187.html",
+};
+
+/** Known Tata Cliq Luxury PDPs when official / search miss (compact → URL). */
+const TATA_CLIQ_REF_URLS = {
+  FS6187:
+    "https://luxury.tatacliq.com/fossil-machine-men-41-mm/p-mp000000031884284",
+};
+
+const SOFT_MISS_HINT =
+  "Official fossil.in blocked or missing; retailer chain missed — save PDP HTML to fixtures/<SKU>.html or pass tatacliq_url";
 
 const ATTR_MAP = {
   "dial color": "dialColor",
@@ -64,7 +104,12 @@ function skuMatchKeys(raw) {
     ...new Set(
       [n.compact, n.original]
         .filter(Boolean)
-        .map((s) => String(s).toUpperCase().replace(/[.\-_\s]/g, "").replace(/SET$/i, ""))
+        .map((s) =>
+          String(s)
+            .toUpperCase()
+            .replace(/[.\-_\s]/g, "")
+            .replace(/SET$/i, "")
+        )
     ),
   ];
 }
@@ -225,8 +270,10 @@ function extractImages(html, skuCompact) {
 function resolveProductUrl(sku, options = {}) {
   if (options.officialUrl) return options.officialUrl;
   const { compact } = normalizeSku(sku);
-  // Direct SKU path often 404s without slug — caller should pass officialUrl or search
-  return `${SITE_ORIGIN}/search?q=${encodeURIComponent(compact)}`;
+  const map = options.refUrls || REF_URLS;
+  if (map[compact]) return map[compact];
+  // Direct SKU path often 404s without slug — search or retailer fallback
+  return null;
 }
 
 /**
@@ -281,7 +328,7 @@ async function fetchProductHtml(sku, options = {}) {
   }
 
   const { compact } = normalizeSku(sku);
-  let url = options.officialUrl || null;
+  let url = options.officialUrl || resolveProductUrl(sku, options);
 
   if (!url) {
     // Probe search page for PDP link (often Akamai-blocked)
@@ -309,16 +356,40 @@ async function fetchProductHtml(sku, options = {}) {
     );
   }
 
-  const res = await fetchText(url, { timeoutMs: options.timeoutMs || 30000 });
-  if (!res.ok || !res.text || res.text.length < 2000 || /Access Denied/i.test(res.text)) {
+  try {
+    const res = await fetchText(url, { timeoutMs: options.timeoutMs || 30000 });
+    if (
+      !res.ok ||
+      !res.text ||
+      res.text.length < 2000 ||
+      /Access Denied/i.test(res.text)
+    ) {
+      const fp = fixturePathForSku(options.fixtureDir, sku);
+      if (fp) return readFixtureHtml(fp, url);
+      throw Object.assign(
+        new Error(
+          `fetch_failed: HTTP ${res.status || "?"} for ${url} (Akamai may be blocking Node)`
+        ),
+        { code: "fetch_failed", sourceUrl: url }
+      );
+    }
+    return { html: res.text, sourceUrl: res.url || url, fromFixture: false };
+  } catch (err) {
+    if (err.code === "fetch_failed" || err.code === "not_found") throw err;
     const fp = fixturePathForSku(options.fixtureDir, sku);
-    if (fp) return readFixtureHtml(fp, url);
+    if (fp) {
+      console.warn(
+        `  live fetch failed (${err.message}); falling back to fixture ${path.basename(fp)}`
+      );
+      return readFixtureHtml(fp, options.officialUrl || url);
+    }
     throw Object.assign(
-      new Error(`fetch_failed: HTTP ${res.status || "?"} for ${url}`),
+      new Error(
+        `fetch_failed: ${err.message} for ${url} (Akamai may be blocking Node)`
+      ),
       { code: "fetch_failed", sourceUrl: url }
     );
   }
-  return { html: res.text, sourceUrl: res.url || url, fromFixture: false };
 }
 
 function mapProduct(html, skuInput, sourceUrl) {
@@ -340,12 +411,7 @@ function mapProduct(html, skuInput, sourceUrl) {
 
   const description =
     match1(html, /property=["']og:description["']\s+content=["']([^"']+)/i) ||
-    stripTags(
-      match1(
-        html,
-        /(This \d+mm[\s\S]{20,400}?\.)/
-      )
-    ) ||
+    stripTags(match1(html, /(This \d+mm[\s\S]{20,400}?\.)/)) ||
     String(ld?.description || "").trim();
 
   // Prefer short marketing blurb when og:description is SEO boilerplate
@@ -433,43 +499,116 @@ function mapProduct(html, skuInput, sourceUrl) {
   return normalized;
 }
 
+async function enrichFromRetailerFallback(sku, options = {}) {
+  const { product, attempts } = await enrichFromRetailerChain(sku, {
+    ...options,
+    brandHint: BRAND,
+    preset: "luxury",
+    tataCliqRefUrls: {
+      ...TATA_CLIQ_REF_URLS,
+      ...(options.tataCliqRefUrls || {}),
+    },
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  });
+  return { product, attempts };
+}
+
+function softMissReason(officialReason, retailerAttempts) {
+  const bits = [SOFT_MISS_HINT];
+  const reason = String(officialReason || "");
+  if (/fetch_failed|403|Access Denied|Akamai may be blocking/i.test(reason)) {
+    bits.unshift("fossil.in HTML fetch blocked (Akamai)");
+  } else if (/no Fossil PDP URL/i.test(reason)) {
+    bits.unshift("no fossil.in PDP URL resolved");
+  } else if (reason && !/Akamai often blocks Node/i.test(reason)) {
+    bits.unshift(reason);
+  }
+  const attemptSummary = Object.entries(retailerAttempts || {})
+    .map(([id, a]) => `${id}:${(a && a.status) || "?"}`)
+    .join(", ");
+  if (attemptSummary) bits.push(`retailers [${attemptSummary}]`);
+  return bits.join(" — ");
+}
+
 async function enrichSku(sku, options = {}) {
   const normalized = normalizeSku(sku);
-  try {
-    const { html, sourceUrl, fromFixture } = await fetchProductHtml(sku, options);
-    const hay = html.toUpperCase().replace(/[.\-_\s]/g, "");
-    if (!hay.includes(normalized.compact)) {
-      return {
-        status: "not_found",
-        sku: normalized.compact,
-        brand: BRAND,
-        source: SOURCE_OFFICIAL,
-        reason: "SKU not present on Fossil PDP",
-        sourceUrl,
-        scrapedAt: new Date().toISOString(),
-      };
-    }
-    const mapped = mapProduct(html, sku, sourceUrl);
-    mapped.fetchMode = fromFixture ? "fixture" : "live";
-    if (options.delayMs) await sleep(options.delayMs);
-    return mapped;
-  } catch (err) {
+
+  if (
+    options.collectiveOnly ||
+    options.tataCliqOnly ||
+    options.tgtLuxeOnly ||
+    options.ethosOnly
+  ) {
+    const { product, attempts } = await enrichFromRetailerFallback(sku, options);
+    if (product && product.status === "ok") return product;
     return {
-      status: err.code || "error",
+      status: "not_found",
       sku: normalized.compact,
       brand: BRAND,
       source: SOURCE_OFFICIAL,
-      reason: err.message,
-      sourceUrl: err.sourceUrl || null,
+      reason: softMissReason("retailer-only scrape failed", attempts),
+      retailerAttempts: attempts,
+      sourceUrl: null,
       scrapedAt: new Date().toISOString(),
     };
   }
+
+  let officialErr = null;
+  let officialSourceUrl = null;
+  try {
+    const { html, sourceUrl, fromFixture } = await fetchProductHtml(
+      sku,
+      options
+    );
+    officialSourceUrl = sourceUrl;
+    const hay = html.toUpperCase().replace(/[.\-_\s]/g, "");
+    if (!hay.includes(normalized.compact)) {
+      officialErr = Object.assign(new Error("SKU not present on Fossil PDP"), {
+        code: "not_found",
+        sourceUrl,
+      });
+    } else {
+      const mapped = mapProduct(html, sku, sourceUrl);
+      mapped.fetchMode = fromFixture ? "fixture" : "live";
+      if (options.delayMs) await sleep(options.delayMs);
+      return mapped;
+    }
+  } catch (err) {
+    officialErr = err;
+    officialSourceUrl = err.sourceUrl || officialSourceUrl;
+  }
+
+  const failStatus = (officialErr && officialErr.code) || "error";
+  let retailerAttempts = null;
+  if (!options.skipRetailerFallback && OFFICIAL_FAIL_CODES.has(failStatus)) {
+    const { product, attempts } = await enrichFromRetailerFallback(sku, options);
+    retailerAttempts = attempts;
+    if (product && product.status === "ok") return product;
+  }
+
+  return {
+    status: failStatus === "fetch_failed" ? "not_found" : failStatus,
+    sku: normalized.compact,
+    brand: BRAND,
+    source: SOURCE_OFFICIAL,
+    reason: softMissReason(officialErr && officialErr.message, retailerAttempts),
+    sourceUrl: officialSourceUrl || null,
+    scrapedAt: new Date().toISOString(),
+    retailerAttempts: retailerAttempts || undefined,
+  };
 }
 
 module.exports = {
   BRAND,
   SITE_ORIGIN,
   SOURCE_OFFICIAL,
+  SOURCE_COLLECTIVE,
+  SOURCE_TATA,
+  SOURCE_TGT,
+  SOURCE_ETHOS,
+  REF_URLS,
+  TATA_CLIQ_REF_URLS,
   ATTR_MAP,
   normalizeSku,
   skuMatchKeys,
@@ -480,5 +619,6 @@ module.exports = {
   extractJsonLdProduct,
   mapProduct,
   fetchProductHtml,
+  enrichFromRetailerFallback,
   enrichSku,
 };
