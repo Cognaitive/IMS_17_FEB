@@ -19,12 +19,19 @@
  *
  * Blockers: Akamai/CF on casio.com + India store for Node/curl. Save browser
  * HTML to fixtures/<INDIA_CODE>.html or fixtures/<MODEL>.html.
+ *
+ * On official miss/block: Collective → Tata Cliq Luxury → TGT Luxe → Ethos.
  */
 
 const path = require("path");
 const fs = require("fs");
 const { fetchText, sleep } = require("../lib/http");
 const { buildSeo } = require("../lib/seo");
+const {
+  enrichFromRetailerChain,
+  recoverAfterOfficialMiss,
+  SOURCE: RETAILER_SOURCE,
+} = require("../lib/retailerFallback");
 const {
   normalizeProductFields,
   normalizeCaseSize,
@@ -34,6 +41,13 @@ const {
 const BRAND = "Casio";
 const SITE_ORIGIN = "https://www.casio.com";
 const SOURCE_OFFICIAL = "casio";
+const SOURCE_COLLECTIVE = RETAILER_SOURCE.COLLECTIVE;
+const SOURCE_TATA = RETAILER_SOURCE.TATA;
+const SOURCE_TGT = RETAILER_SOURCE.TGT;
+const SOURCE_ETHOS = RETAILER_SOURCE.ETHOS;
+
+const SOFT_MISS_HINT =
+  "Official Casio blocked or missing; retailer chain missed — save PDP HTML to fixtures/ or pass tatacliq_url";
 
 /** Common India-code → model overrides (expand as staff confirm). */
 const INDIA_CODE_TO_MODEL = {
@@ -428,8 +442,50 @@ function mapProduct(html, skuInput, sourceUrl, options = {}) {
   return normalized;
 }
 
+async function enrichFromRetailerFallback(sku, options = {}) {
+  const { product, attempts } = await enrichFromRetailerChain(sku, {
+    ...options,
+    brandHint: BRAND,
+    preset: "luxury",
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  });
+  return { product, attempts };
+}
+
 async function enrichSku(sku, options = {}) {
   const normalized = normalizeSku(sku);
+  const recoverOpts = {
+    ...options,
+    brandHint: BRAND,
+    brand: BRAND,
+    sku: normalized.compact,
+    sourceOfficial: SOURCE_OFFICIAL,
+    softMissHint: SOFT_MISS_HINT,
+    blockLabel: "casio.com / India store blocked (CF/Akamai)",
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  };
+
+  if (
+    options.collectiveOnly ||
+    options.tataCliqOnly ||
+    options.tgtLuxeOnly ||
+    options.ethosOnly
+  ) {
+    return recoverAfterOfficialMiss(
+      sku,
+      {
+        status: "not_found",
+        reason: "retailer-only scrape",
+        sku: normalized.compact,
+        brand: BRAND,
+        source: SOURCE_OFFICIAL,
+      },
+      recoverOpts
+    );
+  }
+
   try {
     const { html, sourceUrl, fromFixture } = await fetchProductHtml(sku, options);
     const model = resolveModel(sku, options);
@@ -439,15 +495,18 @@ async function enrichSku(sku, options = {}) {
       hay.includes(normalized.compact) ||
       /CASIO|G-SHOCK|EDIFICE/i.test(html);
     if (!okHint && !fromFixture) {
-      return {
-        status: "not_found",
-        sku: normalized.compact,
-        brand: BRAND,
-        source: SOURCE_OFFICIAL,
-        reason: "Casio model/SKU not present on resolved page",
-        sourceUrl,
-        scrapedAt: new Date().toISOString(),
-      };
+      return recoverAfterOfficialMiss(
+        sku,
+        {
+          status: "not_found",
+          reason: "Casio model/SKU not present on resolved page",
+          sourceUrl,
+          sku: normalized.compact,
+          brand: BRAND,
+          source: SOURCE_OFFICIAL,
+        },
+        recoverOpts
+      );
     }
     const mapped = mapProduct(html, sku, sourceUrl, options);
     mapped.fetchMode = fromFixture ? "fixture" : "live";
@@ -461,15 +520,7 @@ async function enrichSku(sku, options = {}) {
     if (options.delayMs) await sleep(options.delayMs);
     return mapped;
   } catch (err) {
-    return {
-      status: err.code || "error",
-      sku: normalized.compact,
-      brand: BRAND,
-      source: SOURCE_OFFICIAL,
-      reason: err.message,
-      sourceUrl: err.sourceUrl || null,
-      scrapedAt: new Date().toISOString(),
-    };
+    return recoverAfterOfficialMiss(sku, err, recoverOpts);
   }
 }
 
@@ -477,6 +528,10 @@ module.exports = {
   BRAND,
   SITE_ORIGIN,
   SOURCE_OFFICIAL,
+  SOURCE_COLLECTIVE,
+  SOURCE_TATA,
+  SOURCE_TGT,
+  SOURCE_ETHOS,
   ATTR_MAP,
   INDIA_CODE_TO_MODEL,
   normalizeSku,
@@ -489,5 +544,6 @@ module.exports = {
   extractImages,
   mapProduct,
   fetchProductHtml,
+  enrichFromRetailerFallback,
   enrichSku,
 };

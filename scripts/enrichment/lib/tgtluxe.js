@@ -190,11 +190,23 @@ function inferFromHandleAndTitle(handle, title) {
   return { dialColor, movement, gender };
 }
 
+/** Exact SKU token match — reject near-misses like MKO125 inside MKO1256. */
+function hayHasExactSku(hayRaw, compact) {
+  const c = compactSku(compact);
+  if (!c || !hayRaw) return false;
+  const up = String(hayRaw).toUpperCase().replace(/[.\-_\s]/g, "");
+  const idx = up.indexOf(c);
+  if (idx < 0) return false;
+  const before = idx === 0 ? "" : up[idx - 1];
+  const after = idx + c.length >= up.length ? "" : up[idx + c.length];
+  const borderOk = (ch) => !ch || !/[A-Z0-9]/.test(ch);
+  return borderOk(before) && borderOk(after);
+}
+
 function skuInHaystack(sku, ...parts) {
   const compact = compactSku(sku);
   if (!compact) return false;
-  const hay = compactSku(parts.filter(Boolean).join(" "));
-  return hay.includes(compact);
+  return hayHasExactSku(parts.filter(Boolean).join(" "), compact);
 }
 
 /** Coerce thin TGT dial strings onto IMS dial-color options. */
@@ -592,17 +604,32 @@ async function enrichFromTgtLuxe(sku, options = {}) {
   });
   product.fetchMode = "live";
 
+  const pageSku = compactSku(
+    shopifyProduct.variants?.[0]?.sku ||
+      extractSkuFromHandle(shopifyProduct.handle) ||
+      extractSkuFromHandle(product.title) ||
+      ""
+  );
+  if (pageSku && pageSku !== compact) {
+    return {
+      status: "not_found",
+      sku: compact,
+      brand: brandHint,
+      source: SOURCE_ID,
+      reason: `tgtluxe: SKU mismatch (wanted ${compact}, page ${pageSku})`,
+      sourceUrl,
+      scrapedAt: new Date().toISOString(),
+    };
+  }
+
   const hay = [
     product.officialSku,
     product.title,
     shopifyProduct.handle,
     shopifyProduct.variants?.[0]?.sku,
     JSON.stringify(shopifyProduct.images || []).slice(0, 500),
-  ]
-    .join(" ")
-    .toUpperCase()
-    .replace(/[.\-_\s]/g, "");
-  if (compact && !hay.includes(compact)) {
+  ].join(" ");
+  if (compact && !hayHasExactSku(hay, compact)) {
     return {
       status: "not_found",
       sku: compact,
@@ -616,6 +643,11 @@ async function enrichFromTgtLuxe(sku, options = {}) {
 
   if (options.delayMs) await sleep(options.delayMs);
   return product;
+}
+
+function extractSkuFromHandle(handle) {
+  const m = String(handle || "").match(/\b(mk[o0]?\d{3,6})\b/i);
+  return m ? m[1].toUpperCase() : "";
 }
 
 module.exports = {

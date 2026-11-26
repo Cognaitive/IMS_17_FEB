@@ -11,7 +11,7 @@ Unpublished counts from Mongo (`isPublished` false/missing), Nov 2025. Exclude a
 | DW | 84 | danielwellington.com | Deferred | CF challenge; many IMS `DW0DG*` codes not on global catalog |
 | Alba | 61 | (Seiko sub-brand) | Deferred | No clear official PDP catalog for AS/AL/AH codes |
 | Just Cavalli | 58 | — | Deferred | No reliable official watch e-com |
-| Alexandre Christie | 58 | alexandrechristie.com (CF) + Collective / **Tata Cliq** / TGT / Ethos | **Started** (retailer-first) | First SKU `2B58BFBROBO` ok via Tata Cliq; batch `output/alexandre-christie-batch/`; IMS Get details + preview `#progress/alexandre-christie` |
+| Alexandre Christie | 58 | alexandrechristie.com (CF) + Collective / **Tata Cliq** / TGT / Ethos | **Batch run** (retailer-first) | **12 ok / 46 fail**; sources: Tata Cliq 1 · TGT Luxe 11; official CF-blocked; Bing/DDG Tata search returned 0; Collective API 404; remaining not on TGT catalog / retailer chain; batch `output/alexandre-christie-batch/` |
 | Titan | 57 | titan.co.in | Done (prior) | |
 | Seiko | 52 | **seikowatches.co.in** (Shopify; CF) + seikowatches.com fallback | **Added** (fixture-first India) | Batch **32 India + 15 global = 47 ok / 5 not on either**; see `output/seiko-batch/404-report.json` (HGK008P1, SKK721P1, SNKN58K1, SSC763P1, SWR080P1) |
 | Timex | 46 | shop.timexindia.com | Done (prior) | |

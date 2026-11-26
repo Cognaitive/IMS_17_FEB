@@ -9,7 +9,8 @@
  *   node run-fossil.js ES5498 --prefer-fixture
  *   node run-fossil.js --csv input/fossil-skus.csv --prefer-fixture --out output/fossil-batch
  *
- * Akamai often blocks Node — use --prefer-fixture / --html fixtures/<SKU>.html
+ * Akamai often blocks Node — use --prefer-fixture / --html fixtures/<SKU>.html.
+ * Official miss → Collective → Tata Cliq Luxury → TGT Luxe → Ethos (via brands/fossil.js).
  *
  * Output (under ./output/<timestamp>/ or --out):
  *   products.json, import.csv, seo.json, not_found.json, merge-report.json, images/
@@ -17,7 +18,11 @@
 
 const fs = require("fs");
 const path = require("path");
-const { enrichSku, normalizeSku } = require("./brands/fossil");
+const {
+  enrichSku,
+  normalizeSku,
+  REF_URLS: BRAND_REF_URLS,
+} = require("./brands/fossil");
 const { toImportCsv } = require("./lib/csv");
 const { fetchBuffer, sleep, imageExtFromBuffer } = require("./lib/http");
 const { MERGE_POLICY } = require("./lib/merge");
@@ -25,8 +30,7 @@ const { MERGE_POLICY } = require("./lib/merge");
 const ROOT = __dirname;
 
 const REF_URLS = {
-  "FS5512": "https://www.fossil.in/products/neutra-chronograph-amber-leather-watch/FS5512.html",
-  "ES5498": "https://www.fossil.in/products/harlow-three-hand-green-leather-and-rose-gold-tone-stainless-steel-watch/ES5498.html"
+  ...BRAND_REF_URLS,
 };
 
 function usage() {

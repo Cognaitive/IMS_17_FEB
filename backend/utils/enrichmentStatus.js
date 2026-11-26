@@ -18,6 +18,12 @@ const {
   loadCasioBatchIndex,
   loadSeikoBatchIndex,
   loadLonginesBatchIndex,
+  loadRadoBatchIndex,
+  loadEmporioArmaniBatchIndex,
+  loadArmaniExchangeBatchIndex,
+  loadEarnshawBatchIndex,
+  loadAlexandreChristieBatchIndex,
+  loadMichaelKorsBatchIndex,
   ENRICHABLE_BRANDS,
 } = require("../controllers/enrichmentController");
 
@@ -29,6 +35,12 @@ const fossil = require("../scripts/enrichment/brands/fossil");
 const casio = require("../scripts/enrichment/brands/casio");
 const seiko = require("../scripts/enrichment/brands/seiko");
 const longines = require("../scripts/enrichment/brands/longines");
+const rado = require("../scripts/enrichment/brands/rado");
+const emporioArmani = require("../scripts/enrichment/brands/emporio-armani");
+const armaniExchange = require("../scripts/enrichment/brands/armani-exchange");
+const earnshaw = require("../scripts/enrichment/brands/earnshaw");
+const alexandreChristie = require("../scripts/enrichment/brands/alexandre-christie");
+const michaelKors = require("../scripts/enrichment/brands/michael-kors");
 
 const ENRICHMENT_OUTPUT = path.join(
   __dirname,
@@ -224,6 +236,42 @@ const BRAND_CONFIG = [
     label: "Longines",
     mod: longines,
     loadDone: loadLonginesBatchIndex,
+  },
+  {
+    key: "rado",
+    label: "Rado",
+    mod: rado,
+    loadDone: loadRadoBatchIndex,
+  },
+  {
+    key: "emporio-armani",
+    label: "Emporio Armani",
+    mod: emporioArmani,
+    loadDone: loadEmporioArmaniBatchIndex,
+  },
+  {
+    key: "armani-exchange",
+    label: "Armani Exchange",
+    mod: armaniExchange,
+    loadDone: loadArmaniExchangeBatchIndex,
+  },
+  {
+    key: "earnshaw",
+    label: "Earnshaw",
+    mod: earnshaw,
+    loadDone: loadEarnshawBatchIndex,
+  },
+  {
+    key: "alexandre-christie",
+    label: "Alexandre Christie",
+    mod: alexandreChristie,
+    loadDone: loadAlexandreChristieBatchIndex,
+  },
+  {
+    key: "michael-kors",
+    label: "Michael Kors",
+    mod: michaelKors,
+    loadDone: loadMichaelKorsBatchIndex,
   },
 ];
 

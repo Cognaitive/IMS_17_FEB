@@ -17,13 +17,19 @@
  *
  * Cloudflare often blocks Node against seikowatches.co.in — use fixtures /
  * browser-saved product JSON; Get details passes preferFixture: true.
- * Official brand images only (no Ethos/Helios). Do not auto-publish.
+ * On India+global miss/block: Collective → Tata Cliq → TGT Luxe → Ethos.
+ * Do not auto-publish.
  */
 
 const path = require("path");
 const fs = require("fs");
 const { fetchText, sleep } = require("../lib/http");
 const { buildSeo } = require("../lib/seo");
+const {
+  enrichFromRetailerChain,
+  recoverAfterOfficialMiss,
+  SOURCE: RETAILER_SOURCE,
+} = require("../lib/retailerFallback");
 const {
   normalizeProductFields,
   normalizeCaseSize,
@@ -38,6 +44,13 @@ const PREFERRED_LOCALE = "in-en";
 const SOURCE_OFFICIAL = "seiko";
 const SOURCE_INDIA = "seiko-india";
 const SOURCE_GLOBAL = "seiko-global";
+const SOURCE_COLLECTIVE = RETAILER_SOURCE.COLLECTIVE;
+const SOURCE_TATA = RETAILER_SOURCE.TATA;
+const SOURCE_TGT = RETAILER_SOURCE.TGT;
+const SOURCE_ETHOS = RETAILER_SOURCE.ETHOS;
+
+const SOFT_MISS_HINT =
+  "Official Seiko (India/global) blocked or missing; retailer chain missed — save PDP HTML/JSON to fixtures/ or pass tatacliq_url";
 const MARSFLAG_SEARCH =
   "https://finder.api.mf.marsflag.com/api/v1/finder_service/documents/0ecf9cce/search";
 
@@ -1324,6 +1337,35 @@ async function enrichSku(sku, options = {}) {
   const normalized = normalizeSku(sku);
   const attempted = [];
 
+  if (
+    options.collectiveOnly ||
+    options.tataCliqOnly ||
+    options.tgtLuxeOnly ||
+    options.ethosOnly
+  ) {
+    return recoverAfterOfficialMiss(
+      sku,
+      {
+        status: "not_found",
+        reason: "retailer-only scrape",
+        sku: normalized.compact,
+        brand: BRAND,
+        source: SOURCE_OFFICIAL,
+      },
+      {
+        ...options,
+        brandHint: BRAND,
+        brand: BRAND,
+        sku: normalized.compact,
+        sourceOfficial: SOURCE_OFFICIAL,
+        softMissHint: SOFT_MISS_HINT,
+        blockLabel: "seikowatches.co.in / seikowatches.com blocked (Cloudflare)",
+        fixtureDir:
+          options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+      }
+    );
+  }
+
   try {
     // 1) India Shopify preferred
     const india = await fetchIndiaProduct(sku, options);
@@ -1366,34 +1408,64 @@ async function enrichSku(sku, options = {}) {
       return mapped;
     }
 
-    return {
-      status: global.status || "not_found",
-      sku: normalized.compact,
-      brand: BRAND,
-      source: SOURCE_OFFICIAL,
-      reason:
-        global.reason ||
-        `not_found: no Seiko PDP on seikowatches.co.in or seikowatches.com for ${normalized.compact}`,
-      sourceUrl: global.sourceUrl || null,
-      httpStatus: global.httpStatus || 0,
-      attemptedUrls: [...attempted, ...(global.attemptedUrls || [])],
-      soft404: Boolean(global.soft404),
-      scrapedAt: new Date().toISOString(),
-    };
+    return recoverAfterOfficialMiss(
+      sku,
+      {
+        status: global.status || "not_found",
+        reason:
+          global.reason ||
+          `not_found: no Seiko PDP on seikowatches.co.in or seikowatches.com for ${normalized.compact}`,
+        sourceUrl: global.sourceUrl || null,
+        sku: normalized.compact,
+        brand: BRAND,
+        source: SOURCE_OFFICIAL,
+      },
+      {
+        ...options,
+        brandHint: BRAND,
+        brand: BRAND,
+        sku: normalized.compact,
+        sourceOfficial: SOURCE_OFFICIAL,
+        softMissHint: SOFT_MISS_HINT,
+        blockLabel: "seikowatches.co.in / seikowatches.com blocked (Cloudflare)",
+        fixtureDir:
+          options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+        extraFields: {
+          httpStatus: global.httpStatus || 0,
+          attemptedUrls: [...attempted, ...(global.attemptedUrls || [])],
+          soft404: Boolean(global.soft404),
+        },
+      }
+    );
   } catch (err) {
-    return {
-      status: err.code || "error",
-      sku: normalized.compact,
+    return recoverAfterOfficialMiss(sku, err, {
+      ...options,
+      brandHint: BRAND,
       brand: BRAND,
-      source: SOURCE_OFFICIAL,
-      reason: err.message,
-      sourceUrl: err.sourceUrl || null,
-      httpStatus: err.httpStatus || 0,
-      attemptedUrls: err.attemptedUrls || attempted,
-      soft404: Boolean(err.soft404),
-      scrapedAt: new Date().toISOString(),
-    };
+      sku: normalized.compact,
+      sourceOfficial: SOURCE_OFFICIAL,
+      softMissHint: SOFT_MISS_HINT,
+      blockLabel: "seikowatches.co.in / seikowatches.com blocked (Cloudflare)",
+      fixtureDir:
+        options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+      extraFields: {
+        httpStatus: err.httpStatus || 0,
+        attemptedUrls: err.attemptedUrls || attempted,
+        soft404: Boolean(err.soft404),
+      },
+    });
   }
+}
+
+async function enrichFromRetailerFallback(sku, options = {}) {
+  const { product, attempts } = await enrichFromRetailerChain(sku, {
+    ...options,
+    brandHint: BRAND,
+    preset: "luxury",
+    fixtureDir:
+      options.fixtureDir || path.join(__dirname, "..", "fixtures"),
+  });
+  return { product, attempts };
 }
 
 // Back-compat aliases used by older callers / tests
@@ -1441,6 +1513,10 @@ module.exports = {
   SOURCE_OFFICIAL,
   SOURCE_INDIA,
   SOURCE_GLOBAL,
+  SOURCE_COLLECTIVE,
+  SOURCE_TATA,
+  SOURCE_TGT,
+  SOURCE_ETHOS,
   COLLECTIONS,
   ATTR_MAP,
   SHOPIFY_ATTR_MAP,
@@ -1460,6 +1536,7 @@ module.exports = {
   mapFromShopify,
   fetchProductHtml,
   fetchIndiaProduct,
+  enrichFromRetailerFallback,
   enrichSku,
   pdpUrl: globalPdpUrl,
   pdpUrlFromHandle,

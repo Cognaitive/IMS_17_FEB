@@ -1,0 +1,9 @@
+# Locally-managed Cloudflare Tunnel for Samay Balmain scrape preview.
+# Credentials live in ~/.cloudflared/<UUID>.json (NOT in this repo).
+tunnel: ffd37963-dd34-44ed-bd00-3e6e35fac31c
+credentials-file: /Users/cognaitive/.cloudflared/ffd37963-dd34-44ed-bd00-3e6e35fac31c.json
+
+ingress:
+  - hostname: samay-test.cognaitive.in
+    service: http://127.0.0.1:5056
+  - service: http_status:404

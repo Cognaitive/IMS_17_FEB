@@ -11,7 +11,7 @@ Unpublished counts from Mongo (`isPublished` false/missing), Nov 2025. Exclude a
 | DW | 84 | danielwellington.com | Deferred | CF challenge; many IMS `DW0DG*` codes not on global catalog |
 | Alba | 61 | (Seiko sub-brand) | Deferred | No clear official PDP catalog for AS/AL/AH codes |
 | Just Cavalli | 58 | — | Deferred | No reliable official watch e-com |
-| Alexandre Christie | 58 | alexandrechristie.com (CF) + Collective / **Tata Cliq** / TGT / Ethos | **Started** (retailer-first) | First SKU `2B58BFBROBO` ok via Tata Cliq; batch `output/alexandre-christie-batch/`; IMS Get details + preview `#progress/alexandre-christie` |
+| Alexandre Christie | 58 | alexandrechristie.com (CF) + Collective / **Tata Cliq** / TGT / Ethos | **Batch run** (retailer-first) | **12 ok / 46 fail**; sources: Tata Cliq 1 · TGT Luxe 11; official CF-blocked; Bing/DDG Tata search returned 0; Collective API 404; remaining not on TGT catalog / retailer chain; batch `output/alexandre-christie-batch/` |
 | Titan | 57 | titan.co.in | Done (prior) | |
 | Seiko | 52 | **seikowatches.co.in** (Shopify; CF) + seikowatches.com fallback | **Added** (fixture-first India) | Batch **32 India + 15 global = 47 ok / 5 not on either**; see `output/seiko-batch/404-report.json` (HGK008P1, SKK721P1, SNKN58K1, SSC763P1, SWR080P1) |
 | Timex | 46 | shop.timexindia.com | Done (prior) | |
@@ -23,7 +23,7 @@ Unpublished counts from Mongo (`isPublished` false/missing), Nov 2025. Exclude a
 | Longines | 43 | longines.com (+ Collective / Tata Cliq / TGT Luxe / **Ethos** on miss) | **Added** (live + sitemap + retailer fallback) | Batch **34 ok / 9 remaining**; typo `L22734716→L27734716`; Collective + TGT Luxe recovered retailer-only SKUs; see `output/longines-batch/404-report.json` |
 | Earnshaw | 42 | thomas-earnshaw.com (Shopify; + Collective / Tata Cliq / TGT Luxe / **Ethos** on miss) | **Batch run** (live + catalog + retailers) | **35 ok / 7 fail**; all oks from official Earnshaw; typo `ES-8006-ll→ES-8006-II`; remaining `ES-8006-00`, `ES-8294-44`, `ES-8294-88`, `ES-829401`, `ES-8306-01`, `ES-830603`, `ES-830604` (not on Shopify catalog / retailer chain); batch `output/earnshaw-batch/` |
 | Rado | 42 | rado.com/en_in (+ Collective / Tata Cliq / TGT Luxe / **Ethos** on miss) | **Batch run** (live + sitemap + retailers) | **42 ok / 0 fail**; sources: rado 31 · Collective 8 · Tata Cliq 1 · Ethos 1 · TGT Luxe 1; recovered `R22894153` (Tata Cliq) + `R22910153` (Ethos); batch `output/rado-batch/` |
-| Michael Kors | 38 | michaelkors.com (Fossil Group) | Deferred | Akamai; can mirror Fossil pattern later |
+| Michael Kors | 38 | michaelkors.com (Fossil Group; + Collective / Tata Cliq / TGT Luxe / **Ethos** on miss) | **Batch run** (fixture-first + retailers) | **30 ok / 8 fail**; sources: official fixture 23 · Collective 5 · Tata Cliq 1 · TGT Luxe 1; Akamai 403 for Node PDPs (fixtures + FossilPartners CDN); remaining `MK3215`, `MK3836`, `MK4817`, `MK6408`, `MK7677`, `MK7681`, `MK7682`, `MKO125`; batch `output/michael-kors-batch/` |
 | Emporio Armani | 37 | armani.com (+ Amazon.in / **Tata Cliq** / **Ethos** on miss) | **Batch run** (official URL-guess + retailers) | **30 ok / 7 fail**; Tata Cliq recovered AR11123, AR1704; remaining AR0488, AR11170, AR11503, AR115371, AR11741, AR1879, AR1947; batch `output/emporio-armani-batch/` |
 | Armani Exchange | 31 | armani.com (+ Amazon.in / **Tata Cliq** / **Ethos** on miss) | **Batch run** (official URL-guess + retailers) | **26 ok / 5 fail**; Tata Cliq recovered AX2706, AX2716, AX4301; remaining AX2194, AX2620, AX2738, AX5573, AX5583; batch `output/armani-exchange-batch/` |
 | Citizen | 16 | citizenwatches.store | Deferred | Angular SPA; API host opaque to Node |
@@ -31,7 +31,7 @@ Unpublished counts from Mongo (`isPublished` false/missing), Nov 2025. Exclude a
 
 ## Get details brands now supported
 
-Balmain, Titan, Timex, **Tissot**, **Fossil**, **Casio**, **Seiko**, **Longines**, **Rado**, **Emporio Armani**, **Armani Exchange**, **Earnshaw**, **Alexandre Christie**
+Balmain, Titan, Timex, **Tissot**, **Fossil**, **Casio**, **Seiko**, **Longines**, **Rado**, **Emporio Armani**, **Armani Exchange**, **Earnshaw**, **Alexandre Christie**, **Michael Kors**
 
 ## India retailer miss-recovery
 
@@ -39,7 +39,7 @@ Prefer official brand / manufacturer sites first. Shared helper: `lib/retailerFa
 
 | Chain | Order |
 |-------|-------|
-| Luxury (Longines / Rado / Earnshaw / Alexandre Christie) | Collective → **Tata Cliq** → TGT Luxe → **Ethos** |
+| Luxury (Longines / Rado / Earnshaw / Alexandre Christie / Michael Kors) | Collective → **Tata Cliq** → TGT Luxe → **Ethos** |
 | Armani (EA / AX) | Amazon.in → **Tata Cliq** → **Ethos** |
 | Balmain | **Tata Cliq** (existing) |
 
