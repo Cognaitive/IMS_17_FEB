@@ -1592,6 +1592,112 @@ const publishProduct = async (req, res) => {
   }
 };
 
+/**
+ * Fields filled by Get details / enrichment scrape — cleared on Reject.
+ * Staff listing core (brand, sku, category, inventory, price, oldPrice) is kept.
+ */
+const ENRICHMENT_CLEAR_STRING_FIELDS = [
+  "title",
+  "description",
+  "caseMaterial",
+  "dialColor",
+  "waterResistance",
+  "warrantyPeriod",
+  "movement",
+  "gender",
+  "strapColor",
+  "strapMaterial",
+  "caseShape",
+  "caseSize",
+  "seoTitle",
+  "seoDescription",
+  "seoKeywords",
+  "seoImage",
+];
+
+// @desc    Reject enrichment — clear photos + scraped details; keep staff listing
+//          (brand/sku/price/inventory/category). Does NOT delete the product.
+// @route   POST /api/products/:id/reject
+// @access  Private (IMS: owner / admin / staff / head — staff scoped to allowed brands)
+const rejectProductEnrichment = async (req, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    const imsRoles = new Set(["owner", "admin", "staff", "head"]);
+    if (!imsRoles.has(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to reject enrichment",
+      });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    if (role === "staff") {
+      if (req.user.canEditProducts === false) {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is view-only",
+        });
+      }
+      if (!canAccessBrand(req.user, product.brand)) {
+        return res.status(403).json({
+          success: false,
+          message: "You don't have access to this brand",
+        });
+      }
+    }
+
+    const previous = product.toObject();
+
+    // Reject = no photos stored + discard scraped enrichment details
+    product.images = [];
+    for (const field of ENRICHMENT_CLEAR_STRING_FIELDS) {
+      product[field] = "";
+    }
+    // Drop legacy image fields + enrichment slug (unique sparse — avoid "")
+    if (product.imageUrl !== undefined) product.set("imageUrl", undefined);
+    if (product.image !== undefined) product.set("image", undefined);
+    product.set("slug", undefined);
+    // Leave Ready-to-confirm / storefront until re-enrich + Approve
+    product.isPublished = false;
+
+    await product.save();
+
+    const changes = compareProductChanges(previous, product.toObject());
+    logActivity({
+      actionType: "UPDATE",
+      brand: product.brand || "",
+      sku: product.sku || "",
+      productId: product._id,
+      adminId: req.user.id,
+      adminName: req.user.name || "Unknown",
+      adminEmail: req.user.email || "",
+      changes,
+      metadata: {
+        action: "reject-enrichment",
+        policy:
+          "Reject clears images/seoImage + scraped title/description/specs/SEO; keeps brand/sku/price/inventory/category; product not deleted.",
+      },
+    });
+
+    res.json({
+      success: true,
+      message:
+        "Enrichment rejected — photos and scraped details cleared; listing kept",
+      data: { product },
+    });
+  } catch (error) {
+    console.error("Reject enrichment failed:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Reject failed",
+    });
+  }
+};
+
 module.exports = {
   pullBalmainEnrichment,
   pullTitanEnrichment,
@@ -1609,6 +1715,7 @@ module.exports = {
   pullMichaelKorsEnrichment,
   pullProductEnrichment,
   publishProduct,
+  rejectProductEnrichment,
   loadBatchIndex,
   loadBalmainBatchIndex,
   loadTitanBatchIndex,

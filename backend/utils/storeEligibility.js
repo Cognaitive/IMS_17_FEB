@@ -115,6 +115,8 @@ function buildBrandMatchClause(brandParam) {
 }
 
 module.exports = {
+  hasNonEmptyTitle,
+  hasProductImage,
   hasMinimalStorefrontData,
   isStorefrontEligible,
   getStrictStorefrontFilter,

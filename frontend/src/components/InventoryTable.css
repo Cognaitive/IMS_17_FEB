@@ -7,7 +7,7 @@
 
 .table-header {
   display: grid;
-  grid-template-columns: 0.3fr 60px 0.8fr 1.5fr 1.5fr 1.5fr 1fr 1.5fr 1.5fr 2fr;
+  grid-template-columns: 0.3fr 60px 0.8fr 1.5fr 1.5fr 1.5fr 1fr 1.5fr 1.5fr 2.6fr;
   background-color: #f8f9fa;
   border-bottom: 2px solid #e0e0e0;
   padding: 1rem;
@@ -25,7 +25,7 @@
 
 .table-row {
   display: grid;
-  grid-template-columns: 0.3fr 60px 0.8fr 1.5fr 1.5fr 1.5fr 1fr 1.5fr 1.5fr 2fr;
+  grid-template-columns: 0.3fr 60px 0.8fr 1.5fr 1.5fr 1.5fr 1fr 1.5fr 1.5fr 2.6fr;
   border-bottom: 1px solid #f0f0f0;
   padding: 0.75rem 1rem;
   align-items: center;
@@ -79,8 +79,10 @@
 
 .table-cell.actions {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
   justify-content: flex-start;
+  overflow: visible;
 }
 
 .action-btn {
@@ -152,6 +154,56 @@
   }
 }
 
+.approve-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: #047857;
+  background-color: #d1fae5;
+}
+
+.approve-btn:hover:not(:disabled) {
+  color: #065f46;
+  background-color: #a7f3d0;
+  transform: translateY(-1px);
+}
+
+.approve-btn.emphasize {
+  color: #ffffff;
+  background-color: #059669;
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.25);
+}
+
+.approve-btn.emphasize:hover:not(:disabled) {
+  background-color: #047857;
+}
+
+.approve-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.reject-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: #b45309;
+  background-color: #fffbeb;
+}
+
+.reject-btn:hover:not(:disabled) {
+  color: #92400e;
+  background-color: #fef3c7;
+  transform: translateY(-1px);
+}
+
+.reject-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .delete-btn {
   color: #ef4444;
   background-color: #fef2f2;
@@ -172,7 +224,7 @@
 @media (max-width: 1200px) {
   .table-header,
   .table-row {
-    grid-template-columns: 0.5fr 0.6fr 1.2fr 1.2fr 1fr 0.8fr 1.2fr 1.2fr 1.8fr;
+    grid-template-columns: 0.5fr 0.6fr 1.2fr 1.2fr 1fr 0.8fr 1.2fr 1.2fr 2.4fr;
     font-size: 0.85rem;
   }
 }
@@ -184,7 +236,14 @@
 
   .table-header,
   .table-row {
-    min-width: 800px;
+    min-width: 920px;
+  }
+
+  .action-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
   }
 }
 

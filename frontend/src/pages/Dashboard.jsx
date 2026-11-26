@@ -19,7 +19,11 @@ import {
   productKeys,
 } from '../hooks/useProducts'
 import { useDashboardStats } from '../hooks/useDashboard'
-import { pullProductEnrichment } from '../services/productService'
+import {
+  pullProductEnrichment,
+  publishProduct,
+  rejectProductEnrichment,
+} from '../services/productService'
 import { exportToCSV } from '../services/exportService'
 import InventoryTable from '../components/InventoryTable'
 import StatsCards from '../components/StatsCards'
@@ -192,10 +196,14 @@ const Dashboard = () => {
     )
   }, [filters.brand, filters.search, filters.startDate, filters.endDate, filters.sortBy, filters.sortOrder])
 
-  const isOwner = user?.role?.toLowerCase() === 'owner'
+  const role = user?.role?.toLowerCase() || ''
+  const isOwner = role === 'owner'
   const canEditSeo = isOwner || user?.canEditSeo !== false
   const canEditProducts =
-    user?.role?.toLowerCase() !== 'staff' || user?.canEditProducts !== false
+    role !== 'staff' || user?.canEditProducts !== false
+  const canPublish =
+    ['owner', 'admin', 'staff', 'head'].includes(role) &&
+    (role !== 'staff' || user?.canEditProducts !== false)
 
   const handleGetDetails = async (product) => {
     if (!product?._id || !isEnrichableProduct(product) || !canEditProducts) return
@@ -210,6 +218,60 @@ const Dashboard = () => {
     } catch (err) {
       toast.error(
         err.response?.data?.message || err.message || 'Get details failed'
+      )
+    } finally {
+      setEnrichmentBusy(null)
+    }
+  }
+
+  const handleApprovePublish = async (product) => {
+    if (!product?._id || !canPublish) return
+    const label = product.sku || product.title || 'this listing'
+    if (
+      !window.confirm(
+        `Approve & go live "${label}"?\n\nGoes live immediately if it has a title and at least one image (inventory 0 / sold out is OK).`
+      )
+    ) {
+      return
+    }
+    setEnrichmentBusy(`pub-${product._id}`)
+    try {
+      const res = await publishProduct(product._id)
+      toast.success(res?.message || 'Listing published')
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() })
+      if (showModal && selectedProduct?._id === product._id && res?.data?.product) {
+        setSelectedProduct(res.data.product)
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || err.message || 'Publish failed'
+      )
+    } finally {
+      setEnrichmentBusy(null)
+    }
+  }
+
+  const handleRejectEnrichment = async (product) => {
+    if (!product?._id || !canEditProducts) return
+    const label = product.sku || product.title || 'this listing'
+    if (
+      !window.confirm(
+        `Reject enrichment for "${label}"?\n\nClears photos and scraped title/description/specs/SEO. Keeps brand, SKU, price, inventory, and category. Does not delete the product.`
+      )
+    ) {
+      return
+    }
+    setEnrichmentBusy(`rej-${product._id}`)
+    try {
+      const res = await rejectProductEnrichment(product._id)
+      toast.success(res?.message || 'Enrichment rejected — photos cleared')
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() })
+      if (showModal && selectedProduct?._id === product._id && res?.data?.product) {
+        setSelectedProduct(res.data.product)
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || err.message || 'Reject failed'
       )
     } finally {
       setEnrichmentBusy(null)
@@ -298,6 +360,27 @@ const Dashboard = () => {
   const handleActionSheetDelete = () => {
     if (actionSheetProduct) {
       handleDeleteClick(actionSheetProduct)
+    }
+  }
+
+  const handleActionSheetApprove = () => {
+    if (actionSheetProduct) {
+      setShowActionSheet(false)
+      handleApprovePublish(actionSheetProduct)
+    }
+  }
+
+  const handleActionSheetReject = () => {
+    if (actionSheetProduct) {
+      setShowActionSheet(false)
+      handleRejectEnrichment(actionSheetProduct)
+    }
+  }
+
+  const handleActionSheetGetDetails = () => {
+    if (actionSheetProduct) {
+      setShowActionSheet(false)
+      handleGetDetails(actionSheetProduct)
     }
   }
 
@@ -484,6 +567,16 @@ const Dashboard = () => {
             setShowActionSheet(false)
             setActionSheetProduct(null)
           }}
+          product={actionSheetProduct}
+          canPublish={canPublish}
+          canEdit={canEditProducts}
+          onApprove={handleActionSheetApprove}
+          onReject={handleActionSheetReject}
+          onGetDetails={
+            actionSheetProduct && isEnrichableProduct(actionSheetProduct)
+              ? handleActionSheetGetDetails
+              : undefined
+          }
           onDelete={handleActionSheetDelete}
         />
 
@@ -774,6 +867,8 @@ const Dashboard = () => {
               onEdit={handleEditProduct}
               onDelete={handleDeleteClick}
               onGetDetails={canEditProducts ? handleGetDetails : undefined}
+              onApprove={canPublish ? handleApprovePublish : undefined}
+              onReject={canEditProducts ? handleRejectEnrichment : undefined}
               enrichmentBusy={enrichmentBusy}
               loading={productsLoading}
               selectedIds={selectedIds}
@@ -781,6 +876,7 @@ const Dashboard = () => {
               page={pagination.page}
               limit={pagination.limit}
               canEdit={canEditProducts}
+              canPublish={canPublish}
             />
 
             {selectedIds.size > 0 && (

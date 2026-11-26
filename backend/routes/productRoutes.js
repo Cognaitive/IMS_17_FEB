@@ -28,6 +28,7 @@ const {
   pullMichaelKorsEnrichment,
   pullProductEnrichment,
   publishProduct,
+  rejectProductEnrichment,
 } = require("../controllers/enrichmentController");
 const { protect, imsOnly } = require("../middleware/auth");
 
@@ -59,6 +60,7 @@ router.post("/:id/enrich/earnshaw", pullEarnshawEnrichment);
 router.post("/:id/enrich/alexandre-christie", pullAlexandreChristieEnrichment);
 router.post("/:id/enrich/michael-kors", pullMichaelKorsEnrichment);
 router.post("/:id/publish", publishProduct);
+router.post("/:id/reject", rejectProductEnrichment);
 
 module.exports = router;
 

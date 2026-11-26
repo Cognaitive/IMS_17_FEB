@@ -5,12 +5,32 @@ import { getDisplayBrand } from '../utils/brandUtils'
 import { isEnrichableProduct } from '../utils/enrichmentBrands'
 import './InventoryTable.css'
 
+function countImages(product) {
+  if (!product) return 0
+  let n = 0
+  if (Array.isArray(product.images)) {
+    for (const img of product.images) {
+      if (typeof img === 'string' && img.trim()) n += 1
+      else if (img && typeof img === 'object' && (img.url || img.src)) n += 1
+    }
+  }
+  if ((product.imageUrl || '').trim()) n += 1
+  if ((product.image?.url || '').trim()) n += 1
+  return n
+}
+
+function isReadyToPublish(product) {
+  return Boolean((product?.title || '').trim()) && countImages(product) > 0
+}
+
 const InventoryTable = memo(({
   products,
   onView,
   onEdit,
   onDelete,
   onGetDetails,
+  onApprove,
+  onReject,
   enrichmentBusy = null,
   loading,
   selectedIds,
@@ -18,6 +38,7 @@ const InventoryTable = memo(({
   page = 1,
   limit = 50,
   canEdit = true,
+  canPublish = false,
 }) => {
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('en-IN', {
@@ -36,10 +57,13 @@ const InventoryTable = memo(({
     const onEdit = data.onEdit
     const onDelete = data.onDelete
     const onGetDetails = data.onGetDetails
+    const onApprove = data.onApprove
+    const onReject = data.onReject
     const enrichmentBusy = data.enrichmentBusy
     const page = data.page || 1
     const limit = data.limit || 50
     const canEdit = data.canEdit ?? true
+    const canPublish = data.canPublish ?? false
     
     if (!product) return null
     
@@ -48,6 +72,11 @@ const InventoryTable = memo(({
     const isSelected = selectedIds?.has(product._id) || false
     const enrichable = isEnrichableProduct(product)
     const gettingDetails = enrichmentBusy === `scan-${product._id}`
+    const publishing = enrichmentBusy === `pub-${product._id}`
+    const rejecting = enrichmentBusy === `rej-${product._id}`
+    const unpublished = product.isPublished !== true
+    const ready = isReadyToPublish(product)
+    const busy = !!enrichmentBusy
 
     const handleCheckboxChange = (e) => {
       const newSelectedIds = new Set(selectedIds || [])
@@ -106,6 +135,7 @@ const InventoryTable = memo(({
             onClick={() => onView(product)}
             className="action-btn view-btn"
             title="View"
+            aria-label="View"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           </button>
@@ -115,6 +145,7 @@ const InventoryTable = memo(({
                 onClick={() => onEdit(product)}
                 className="action-btn edit-btn"
                 title="Edit"
+                aria-label="Edit"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
               </button>
@@ -123,7 +154,7 @@ const InventoryTable = memo(({
                   type="button"
                   onClick={() => onGetDetails(product)}
                   className="action-btn enrich-btn"
-                  disabled={!!enrichmentBusy}
+                  disabled={busy}
                   aria-label={
                     gettingDetails
                       ? 'Getting product details'
@@ -152,10 +183,72 @@ const InventoryTable = memo(({
                   )}
                 </button>
               )}
+              {canPublish && unpublished && typeof onApprove === 'function' && (
+                <button
+                  type="button"
+                  onClick={() => onApprove(product)}
+                  className={`action-btn approve-btn${ready ? ' emphasize' : ''}`}
+                  disabled={busy}
+                  aria-label={publishing ? 'Publishing' : 'Approve and go live'}
+                  title={
+                    ready
+                      ? 'Approve & go live — publish now (sold-out OK)'
+                      : 'Approve & go live (needs title + image)'
+                  }
+                >
+                  {publishing ? (
+                    <span className="enrich-btn-spinner" aria-hidden="true" />
+                  ) : (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </button>
+              )}
+              {typeof onReject === 'function' && (
+                <button
+                  type="button"
+                  onClick={() => onReject(product)}
+                  className="action-btn reject-btn"
+                  disabled={busy}
+                  aria-label={rejecting ? 'Rejecting enrichment' : 'Reject enrichment'}
+                  title="Reject — clear photos & scraped details; keep brand/SKU/price"
+                >
+                  {rejecting ? (
+                    <span className="enrich-btn-spinner" aria-hidden="true" />
+                  ) : (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  )}
+                </button>
+              )}
               <button
                 onClick={() => onDelete(product)}
                 className="action-btn delete-btn"
                 title="Delete"
+                aria-label="Delete"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
               </button>
@@ -225,10 +318,13 @@ const InventoryTable = memo(({
             onEdit,
             onDelete,
             onGetDetails,
+            onApprove,
+            onReject,
             enrichmentBusy,
             page,
             limit,
             canEdit,
+            canPublish,
           }}
         >
           {Row}
@@ -241,4 +337,3 @@ const InventoryTable = memo(({
 InventoryTable.displayName = 'InventoryTable'
 
 export default InventoryTable
-

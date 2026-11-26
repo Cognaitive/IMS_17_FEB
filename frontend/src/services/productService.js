@@ -78,3 +78,12 @@ export const publishProduct = async (id) => {
   const response = await api.post(`/products/${id}/publish`)
   return response.data
 }
+
+/**
+ * Reject enrichment — clears photos + scraped title/description/specs/SEO.
+ * Keeps staff listing (brand/sku/price/inventory/category). Does not delete.
+ */
+export const rejectProductEnrichment = async (id) => {
+  const response = await api.post(`/products/${id}/reject`)
+  return response.data
+}

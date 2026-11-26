@@ -55,6 +55,22 @@
   background-color: #f0f0f0;
 }
 
+.mobile-action-item.approve {
+  color: #047857;
+}
+
+.mobile-action-item.approve:active {
+  background-color: #d1fae5;
+}
+
+.mobile-action-item.reject {
+  color: #b45309;
+}
+
+.mobile-action-item.reject:active {
+  background-color: #fef3c7;
+}
+
 .mobile-action-item.danger {
   color: #dc3545;
 }

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:hostinger": "npm run build && node scripts/deploy-hostinger.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.20",

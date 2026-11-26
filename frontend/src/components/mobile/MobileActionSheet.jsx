@@ -1,13 +1,24 @@
 import './MobileActionSheet.css'
 
-const MobileActionSheet = ({ isOpen, onClose, onDelete }) => {
+const MobileActionSheet = ({
+  isOpen,
+  onClose,
+  product,
+  canPublish = false,
+  canEdit = true,
+  onApprove,
+  onReject,
+  onGetDetails,
+  onDelete,
+}) => {
   if (!isOpen) return null
 
-  const handleDelete = () => {
+  const unpublished = product?.isPublished !== true
+
+  const runThenClose = (fn) => {
     onClose()
-    // Small delay to allow sheet to close smoothly
     setTimeout(() => {
-      onDelete()
+      fn?.()
     }, 200)
   }
 
@@ -16,9 +27,40 @@ const MobileActionSheet = ({ isOpen, onClose, onDelete }) => {
       <div className="mobile-action-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="mobile-action-sheet-handle"></div>
         <div className="mobile-action-sheet-actions">
+          {canEdit && typeof onGetDetails === 'function' && (
+            <button
+              type="button"
+              className="mobile-action-item"
+              onClick={() => runThenClose(onGetDetails)}
+            >
+              <span className="action-icon">⬇️</span>
+              <span className="action-label">Get details</span>
+            </button>
+          )}
+          {canPublish && unpublished && typeof onApprove === 'function' && (
+            <button
+              type="button"
+              className="mobile-action-item approve"
+              onClick={() => runThenClose(onApprove)}
+            >
+              <span className="action-icon">✓</span>
+              <span className="action-label">Approve & go live</span>
+            </button>
+          )}
+          {canEdit && typeof onReject === 'function' && (
+            <button
+              type="button"
+              className="mobile-action-item reject"
+              onClick={() => runThenClose(onReject)}
+            >
+              <span className="action-icon">✕</span>
+              <span className="action-label">Reject</span>
+            </button>
+          )}
           <button
+            type="button"
             className="mobile-action-item danger"
-            onClick={handleDelete}
+            onClick={() => runThenClose(onDelete)}
           >
             <span className="action-icon">🗑️</span>
             <span className="action-label">Delete</span>
@@ -33,4 +75,3 @@ const MobileActionSheet = ({ isOpen, onClose, onDelete }) => {
 }
 
 export default MobileActionSheet
-
