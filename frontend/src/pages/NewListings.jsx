@@ -59,7 +59,8 @@ const NewListings = () => {
     brand: '',
     missingImages: false,
     missingDescription: false,
-    readyToConfirm: false,
+    // Default: show enriched unpublished rows staff can confirm first
+    readyToConfirm: true,
     page: 1,
   })
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -130,8 +131,10 @@ const NewListings = () => {
 
   const role = user?.role?.toLowerCase() || ''
   const isOwner = role === 'owner'
-  const isAdmin = role === 'admin'
-  const canPublish = isOwner || isAdmin
+  // IMS staff/head can Approve & go live (API enforces brand whitelist for staff)
+  const canPublish =
+    ['owner', 'admin', 'staff', 'head'].includes(role) &&
+    (role !== 'staff' || user?.canEditProducts !== false)
   const canEdit =
     role !== 'staff' || user?.canEditProducts !== false
   const canEditSeo = isOwner || user?.canEditSeo !== false
@@ -140,7 +143,8 @@ const NewListings = () => {
     Boolean(filters.brand) ||
     filters.missingImages ||
     filters.missingDescription ||
-    filters.readyToConfirm ||
+    // readyToConfirm defaults on — only count as active when turned off or combined
+    filters.readyToConfirm !== true ||
     Boolean(filters.search)
 
   const invalidateListings = () => {
@@ -167,7 +171,7 @@ const NewListings = () => {
       brand: '',
       missingImages: false,
       missingDescription: false,
-      readyToConfirm: false,
+      readyToConfirm: true,
       page: 1,
     })
   }
@@ -744,7 +748,7 @@ const NewListings = () => {
       <p className="nl-footnote">
         <strong>Ready to confirm</strong> = unpublished with a title and at least one
         image (batch enrichment applied). Use <strong>Approve &amp; go live</strong>{' '}
-        (owner/admin) to publish — sold-out (inventory 0) is OK.{' '}
+        (owner/admin/staff) to publish — sold-out (inventory 0) is OK.{' '}
         <strong>Get details</strong> fills empty fields only and never publishes
         (scrape ≠ approve; staff data wins). Rows without enrichment stay blank until
         you pull details or a batch is applied.

@@ -73,7 +73,7 @@ export const pullProductEnrichment = async (id, options = {}) => {
   return response.data
 }
 
-/** Approve & go live — sets isPublished=true immediately (owner/admin; sold-out OK). */
+/** Approve & go live — sets isPublished=true immediately (IMS staff+; sold-out OK). */
 export const publishProduct = async (id) => {
   const response = await api.post(`/products/${id}/publish`)
   return response.data

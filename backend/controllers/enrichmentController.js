@@ -9,7 +9,7 @@ const {
   hasNonEmptyTitle,
 } = require("../utils/storeEligibility");
 const { migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
-const { staffWriteError } = require("../utils/staffPermissions");
+const { staffWriteError, canAccessBrand } = require("../utils/staffPermissions");
 const { generateProductSlug } = require("../utils/slugify");
 const {
   mergeProductFields,
@@ -1501,20 +1501,37 @@ const pullProductEnrichment = async (req, res) => {
 // @desc    Approve & publish — set isPublished=true when title + ≥1 image
 //          (inventory 0 OK). Immediate go-live; scrape/pull alone never does this.
 // @route   POST /api/products/:id/publish
-// @access  Private (owner / admin only)
+// @access  Private (IMS: owner / admin / staff / head — staff scoped to allowed brands)
 const publishProduct = async (req, res) => {
   try {
     const role = String(req.user?.role || "").toLowerCase();
-    if (role !== "owner" && role !== "admin") {
+    const imsRoles = new Set(["owner", "admin", "staff", "head"]);
+    if (!imsRoles.has(role)) {
       return res.status(403).json({
         success: false,
-        message: "Only owner or admin can approve and publish listings",
+        message: "Not authorized to approve and publish listings",
       });
     }
 
     const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    // Staff: brand whitelist + view-only still apply; publish is confirm-to-live.
+    if (role === "staff") {
+      if (req.user.canEditProducts === false) {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is view-only",
+        });
+      }
+      if (!canAccessBrand(req.user, product.brand)) {
+        return res.status(403).json({
+          success: false,
+          message: "You don't have access to this brand",
+        });
+      }
     }
 
     if (product.isPublished === true) {
