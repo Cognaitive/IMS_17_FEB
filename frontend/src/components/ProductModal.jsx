@@ -3,6 +3,7 @@ import { AuthContext } from '../context/AuthContext'
 import { useCreateProduct, usePatchProduct, useUpdateProduct, useProduct } from '../hooks/useProducts'
 // Unified image pipeline: use product.images directly
 import { getDisplayBrand } from '../utils/brandUtils'
+import { isStaff } from '../utils/roles'
 import ImageGallery from './ImageGallery'
 import ImageManager from './ImageManager'
 import {
@@ -51,7 +52,7 @@ const ProductModal = ({
 }) => {
   const handleGetDetailsClick = onGetDetails || onScanBalmain || onScanTitan
   const { user } = useContext(AuthContext)
-  const isBasicInfoReadOnly = mode === 'view' || (user?.role?.toLowerCase() === 'staff' && user?.canEditBasicInfo === false)
+  const isBasicInfoReadOnly = mode === 'view' || (isStaff(user) && user?.canEditBasicInfo === false)
   const [formData, setFormData] = useState({
     brand: '',
     sku: '',

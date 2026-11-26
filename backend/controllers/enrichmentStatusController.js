@@ -7,6 +7,7 @@ const {
   buildBrandStatus,
   resolveBatchDir,
 } = require("../utils/enrichmentStatus");
+const { isStaff } = require("../utils/staffPermissions");
 
 function unpublishedBrandFilter(brandLabel, reqUser) {
   const filter = {
@@ -15,7 +16,7 @@ function unpublishedBrandFilter(brandLabel, reqUser) {
     sku: { $exists: true, $nin: [null, ""] },
   };
 
-  if (reqUser && (reqUser.role === "staff" || reqUser.role === "Staff")) {
+  if (isStaff(reqUser)) {
     const allowed = reqUser.allowedBrands || [];
     if (allowed.length === 0) {
       filter.brand = "__NO_ASSIGNED_BRANDS__";

@@ -12,7 +12,7 @@ const {
   storefrontTitleMongoCondition,
 } = require("../utils/storeEligibility");
 const { migrateUrlsToDoSpaces, migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
-const { canAccessBrand, staffWriteError } = require("../utils/staffPermissions");
+const { isStaff, canAccessBrand, staffWriteError } = require("../utils/staffPermissions");
 
 // Keep image sequence deterministic and sync first image as primary.
 const normalizeImageList = (images) => {
@@ -69,8 +69,8 @@ const getProducts = async (req, res) => {
     // Build filter
     const filter = {};
     
-    // Scoped Brand whitelisting permissions for staff members
-    if (req.user && (req.user.role === 'staff' || req.user.role === 'Staff')) {
+    // Scoped Brand whitelisting for all non-admin IMS users (staff/head/…)
+    if (isStaff(req.user)) {
       const allowedBrands = req.user.allowedBrands || [];
       if (allowedBrands.length > 0) {
         if (brand) {
@@ -329,14 +329,9 @@ const createProduct = async (req, res) => {
 
     applyImageNormalization(productData);
 
-    // New products stay unpublished until owner/admin Approves & publishes.
+    // New products stay unpublished until store admin Approves & publishes.
     // Explicit isPublished in body is honored only for owner/admin.
-    const createRole = String(req.user?.role || "").toLowerCase();
-    if (
-      productData.isPublished === true &&
-      createRole !== "owner" &&
-      createRole !== "admin"
-    ) {
+    if (productData.isPublished === true && isStaff(req.user)) {
       productData.isPublished = false;
     } else if (productData.isPublished === undefined) {
       productData.isPublished = false;

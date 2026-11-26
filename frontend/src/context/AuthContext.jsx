@@ -1,6 +1,7 @@
 import { createContext, useState, useEffect, useMemo, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import api from '../services/api'
+import { hasImsAccess, isStoreAdmin } from '../utils/roles'
 
 export const AuthContext = createContext()
 
@@ -13,9 +14,6 @@ const getInitialToken = () => {
   return localStorage.getItem('token') || sessionStorage.getItem('token')
 }
 
-// Website customers (role "user") share the same login API but must not enter the IMS
-const IMS_ROLES = ['owner', 'admin', 'staff', 'head']
-const hasImsAccess = (user) => IMS_ROLES.includes(String(user?.role || '').toLowerCase())
 const NO_ACCESS_MESSAGE = 'This account does not have access to the IMS. Please contact the store owner.'
 
 const normalizeStaffPreview = (staff) => {
@@ -163,10 +161,14 @@ export const AuthProvider = ({ children }) => {
       setRealUser(userData)
       return { success: true }
     } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.message || 'Login failed',
+      const apiMessage = error.response?.data?.message
+      let message = apiMessage || 'Login failed'
+      if (!error.response) {
+        message = 'Cannot reach the API. Check your connection and try again.'
+      } else if (!apiMessage) {
+        message = `Login failed (HTTP ${error.response.status})`
       }
+      return { success: false, message }
     }
   }
 
@@ -208,8 +210,7 @@ export const AuthProvider = ({ children }) => {
 
   const startViewAs = useCallback(
     async (staff) => {
-      const role = String(realUser?.role || '').toLowerCase()
-      if (!['owner', 'admin'].includes(role)) {
+      if (!isStoreAdmin(realUser)) {
         return { success: false, message: 'Only owners and admins can view as staff' }
       }
       const preview = normalizeStaffPreview(staff)
@@ -238,8 +239,7 @@ export const AuthProvider = ({ children }) => {
 
   const canAccessMyStore = useMemo(() => {
     if (isViewAs) return false
-    const role = String(realUser?.role || '').toLowerCase()
-    return role === 'owner' || role === 'admin'
+    return isStoreAdmin(realUser)
   }, [isViewAs, realUser])
 
   return (

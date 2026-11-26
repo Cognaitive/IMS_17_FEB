@@ -9,7 +9,7 @@ const {
   hasNonEmptyTitle,
 } = require("../utils/storeEligibility");
 const { migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
-const { staffWriteError, canAccessBrand } = require("../utils/staffPermissions");
+const { isStaff, staffWriteError, canAccessBrand } = require("../utils/staffPermissions");
 const { generateProductSlug } = require("../utils/slugify");
 const {
   mergeProductFields,
@@ -1560,25 +1560,17 @@ const pullProductEnrichment = async (req, res) => {
 // @desc    Approve & publish — set isPublished=true when title + ≥1 image
 //          (inventory 0 OK). Immediate go-live; scrape/pull alone never does this.
 // @route   POST /api/products/:id/publish
-// @access  Private (IMS: owner / admin / staff / head — staff scoped to allowed brands)
+// @access  Private (IMS — non-admin staff scoped to allowed brands)
 const publishProduct = async (req, res) => {
   try {
-    const role = String(req.user?.role || "").toLowerCase();
-    const imsRoles = new Set(["owner", "admin", "staff", "head"]);
-    if (!imsRoles.has(role)) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to approve and publish listings",
-      });
-    }
-
+    // Route is protect + imsOnly; any IMS user may approve. Non-admins get staff scope.
     const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    // Staff: brand whitelist + view-only still apply; publish is confirm-to-live.
-    if (role === "staff") {
+    // Staff (all non-admin IMS): brand whitelist + view-only still apply.
+    if (isStaff(req.user)) {
       if (req.user.canEditProducts === false) {
         return res.status(403).json({
           success: false,
@@ -1677,24 +1669,16 @@ const ENRICHMENT_CLEAR_STRING_FIELDS = [
 // @desc    Reject enrichment — clear photos + scraped details; keep staff listing
 //          (brand/sku/price/inventory/category). Does NOT delete the product.
 // @route   POST /api/products/:id/reject
-// @access  Private (IMS: owner / admin / staff / head — staff scoped to allowed brands)
+// @access  Private (IMS — non-admin staff scoped to allowed brands)
 const rejectProductEnrichment = async (req, res) => {
   try {
-    const role = String(req.user?.role || "").toLowerCase();
-    const imsRoles = new Set(["owner", "admin", "staff", "head"]);
-    if (!imsRoles.has(role)) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized to reject enrichment",
-      });
-    }
-
+    // Route is protect + imsOnly; any IMS user may reject. Non-admins get staff scope.
     const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    if (role === "staff") {
+    if (isStaff(req.user)) {
       if (req.user.canEditProducts === false) {
         return res.status(403).json({
           success: false,

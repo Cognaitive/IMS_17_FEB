@@ -7,6 +7,7 @@ import { useIsMobile } from '../hooks/useMediaQuery'
 import { AuthContext } from '../context/AuthContext'
 import ViewAsPicker from '../components/ViewAsPicker'
 import { getDisplayBrand } from '../utils/brandUtils'
+import { canEditProducts as canEditProductsFor } from '../utils/roles'
 import {
   isEnrichableProduct,
   formatEnrichmentToast,
@@ -200,11 +201,9 @@ const Dashboard = () => {
   const role = user?.role?.toLowerCase() || ''
   const isOwner = role === 'owner'
   const canEditSeo = isOwner || user?.canEditSeo !== false
-  const canEditProducts =
-    role !== 'staff' || user?.canEditProducts !== false
-  const canPublish =
-    ['owner', 'admin', 'staff', 'head'].includes(role) &&
-    (role !== 'staff' || user?.canEditProducts !== false)
+  // Staff = all non-admin IMS users; store admins always edit/publish
+  const canEditProducts = canEditProductsFor(user)
+  const canPublish = canEditProducts
 
   const handleGetDetails = async (product) => {
     if (!product?._id || !isEnrichableProduct(product) || !canEditProducts) return
@@ -516,7 +515,7 @@ const Dashboard = () => {
             onClearSelection={() => setSelectedIds(new Set())}
           />
         ) : (
-          (user?.role?.toLowerCase() !== 'staff' || user?.canEditProducts !== false) ? (
+          canEditProducts ? (
             <MobileFAB
               onCreateProduct={handleCreateProduct}
               onExportCSV={handleOpenExport}
@@ -779,7 +778,7 @@ const Dashboard = () => {
                 </div>
               )}
               <div className="controls-right" style={user?.canAccessFilters === false ? { marginLeft: 'auto' } : {}}>
-                {(user?.role?.toLowerCase() !== 'staff' || user?.canEditProducts !== false) && (
+                {canEditProducts && (
                   <>
                     <button onClick={handleCreateProduct} className="btn-primary">
                       + Add Product

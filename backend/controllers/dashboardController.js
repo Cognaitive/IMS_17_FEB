@@ -1,14 +1,15 @@
 const DashboardStats = require("../models/DashboardStats");
 const { Product } = require("../models/Product");
 const { recomputeDashboardStats } = require("../utils/recomputeDashboardStats");
+const { isStaff } = require("../utils/staffPermissions");
 
 // @desc    Get dashboard statistics (from precomputed stats - ultra fast)
 // @route   GET /api/dashboard/stats
 // @access  Private
 const getDashboardStats = async (req, res) => {
   try {
-    // Enforce dynamic scoped stats for staff members based on their brand permissions whitelist
-    if (req.user && (req.user.role === 'staff' || req.user.role === 'Staff')) {
+    // Scoped stats for all non-admin IMS users based on brand whitelist
+    if (isStaff(req.user)) {
       const allowedBrands = req.user.allowedBrands || [];
       if (allowedBrands.length > 0) {
         const brandMatch = { brand: { $in: allowedBrands.map(b => new RegExp(`^${b}$`, "i")) } };

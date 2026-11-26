@@ -1,5 +1,6 @@
 const ActivityLog = require('../models/ActivityLog')
 const mongoose = require('mongoose')
+const { isStaff } = require('../utils/staffPermissions')
 
 // @desc    Create activity log (internal use - called by product controllers)
 // @route   POST /api/activity-logs
@@ -65,8 +66,8 @@ const getActivityLogs = async (req, res) => {
     // Build dynamic filter object
     const filter = {}
 
-    // Scoped Brand whitelisting permissions for activity logs
-    if (req.user && (req.user.role === 'staff' || req.user.role === 'Staff')) {
+    // Scoped brand whitelist for all non-admin IMS users
+    if (isStaff(req.user)) {
       const allowedBrands = req.user.allowedBrands || [];
       if (allowedBrands.length > 0) {
         if (brand) {

@@ -13,6 +13,7 @@ import {
   formatEnrichmentToast,
 } from '../utils/enrichmentBrands'
 import { getImageUrls, getThumbnailUrl } from '../utils/imageUtils'
+import { canEditProducts as canEditProductsFor } from '../utils/roles'
 import ProductThumbnail from '../components/ProductThumbnail'
 import ProductModal from '../components/ProductModal'
 import PaginationBar from '../components/PaginationBar'
@@ -134,12 +135,9 @@ const NewListings = () => {
 
   const role = user?.role?.toLowerCase() || ''
   const isOwner = role === 'owner'
-  // IMS staff/head can Approve & go live (API enforces brand whitelist for staff)
-  const canPublish =
-    ['owner', 'admin', 'staff', 'head'].includes(role) &&
-    (role !== 'staff' || user?.canEditProducts !== false)
-  const canEdit =
-    role !== 'staff' || user?.canEditProducts !== false
+  // Staff = all non-admin IMS users; store admins always edit/publish (API scopes brands)
+  const canEdit = canEditProductsFor(user)
+  const canPublish = canEdit
   const canEditSeo = isOwner || user?.canEditSeo !== false
 
   const hasActiveFilters =

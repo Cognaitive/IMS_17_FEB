@@ -9,7 +9,31 @@ const BASIC_FIELDS = [
 
 const SEO_FIELDS = ["seoTitle", "seoDescription", "seoKeywords", "seoImage"];
 
-const isStaff = (user) => String(user?.role || "").toLowerCase() === "staff";
+// Store admin = My Store / view-as initiator (owner + admin).
+const STORE_ADMIN_ROLES = new Set(["owner", "admin"]);
+
+const normalizedRole = (userOrRole) => {
+  if (userOrRole && typeof userOrRole === "object") {
+    return String(userOrRole.role || "").toLowerCase();
+  }
+  return String(userOrRole || "").toLowerCase();
+};
+
+const isStoreAdmin = (user) => STORE_ADMIN_ROLES.has(normalizedRole(user));
+
+/**
+ * Staff = any authenticated non-admin IMS user (not owner/admin, not website "user").
+ * Includes role "staff"/"Staff", legacy "head", and any future non-admin IMS roles.
+ * Do not treat this as role === "staff" only.
+ */
+const isStaff = (user) => {
+  const role = normalizedRole(user);
+  if (!role || role === "user") return false;
+  return !STORE_ADMIN_ROLES.has(role);
+};
+
+/** Mongo filter for staff accounts listed in My Staffs / view-as. */
+const STAFF_ROLE_MONGO = { $nin: ["owner", "Owner", "admin", "user"] };
 
 const canAccessBrand = (user, brand) => {
   if (!isStaff(user)) return true;
@@ -46,4 +70,11 @@ const staffWriteError = (user, current, updates = {}) => {
   return null;
 };
 
-module.exports = { isStaff, canAccessBrand, staffWriteError };
+module.exports = {
+  isStaff,
+  isStoreAdmin,
+  canAccessBrand,
+  staffWriteError,
+  STAFF_ROLE_MONGO,
+  STORE_ADMIN_ROLES,
+};

@@ -1,9 +1,9 @@
 const User = require("../models/User");
+const { isStaff, isStoreAdmin } = require("../utils/staffPermissions");
 
 const VIEW_AS_HEADER = "x-view-as-staff-id";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-const isStaffRole = (role) => String(role || "").toLowerCase() === "staff";
 const isStoreAdminPath = (url = "") =>
   String(url).includes("/store-admin");
 
@@ -11,13 +11,13 @@ const isStoreAdminPath = (url = "") =>
  * Owner/admin can send X-View-As-Staff-Id to preview a staff member's IMS scope.
  * Mutations are always blocked. Store-admin routes are blocked (staff have no My Store).
  * Brand/permission overlays apply on safe reads so listings match that staff.
+ * Target may be any non-admin IMS user (not only role === "staff").
  */
 const applyViewAs = async (req, res, next) => {
   const staffId = req.headers[VIEW_AS_HEADER];
   if (!staffId || !req.user) return next();
 
-  const actorRole = String(req.user.role || "").toLowerCase();
-  if (!["owner", "admin"].includes(actorRole)) {
+  if (!isStoreAdmin(req.user)) {
     return res.status(403).json({
       success: false,
       message: "View-as is only available to owners and admins",
@@ -40,13 +40,14 @@ const applyViewAs = async (req, res, next) => {
 
   try {
     const staff = await User.findById(staffId).select("-password");
-    if (!staff || !isStaffRole(staff.role)) {
+    if (!staff || !isStaff(staff)) {
       return res.status(404).json({
         success: false,
         message: "Staff member not found",
       });
     }
 
+    const actorRole = String(req.user.role || "").toLowerCase();
     if (
       actorRole === "admin" &&
       staff.parentId?.toString() !== req.user._id.toString() &&

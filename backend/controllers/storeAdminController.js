@@ -5,6 +5,7 @@ const Coupon = require('../models/Coupon');
 const Blog = require('../models/Blog');
 const Review = require('../models/Review');
 const StoreQuery = require('../models/StoreQuery');
+const { STAFF_ROLE_MONGO } = require('../utils/staffPermissions');
 
 // --- DASHBOARD ---
 exports.getDashboardStats = async (req, res) => {
@@ -224,11 +225,11 @@ exports.markQueriesAsRead = async (req, res) => {
 // --- STAFF MANAGEMENT ---
 exports.getStaffs = async (req, res) => {
   try {
-    // Owner role can see ALL staff members, admin sees only their own created staff
+    // Owner sees all non-admin IMS users; admin sees only staff they created
     const role = String(req.user.role || '').toLowerCase();
     const query = role === 'owner'
-      ? { role: { $in: ['staff', 'Staff'] } }
-      : { parentId: req.user.id, role: { $in: ['staff', 'Staff'] } };
+      ? { role: STAFF_ROLE_MONGO }
+      : { parentId: req.user.id, role: STAFF_ROLE_MONGO };
     const staffs = await User.find(query).select('-password').sort('-createdAt');
     res.status(200).json({ success: true, data: staffs });
   } catch (error) {

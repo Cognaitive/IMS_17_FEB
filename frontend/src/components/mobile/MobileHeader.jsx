@@ -1,6 +1,7 @@
 import { useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
+import { canEditProducts } from '../../utils/roles'
 import ViewAsPicker from '../ViewAsPicker'
 import './MobileHeader.css'
 
@@ -67,7 +68,7 @@ const MobileHeader = ({ user, onLogout, onCreateProduct, onExportCSV, onImportCS
               <span className="menu-icon">+</span>
               <span>Add Product</span>
             </button>
-            {(user?.role?.toLowerCase() !== 'staff' || user?.canEditProducts !== false) && (
+            {canEditProducts(user) && (
               <button className="mobile-menu-item" onClick={() => handleMenuAction('import')}>
                 <span className="menu-icon">📥</span>
                 <span>Import CSV</span>
