@@ -229,7 +229,7 @@ const Dashboard = () => {
     const label = product.sku || product.title || 'this listing'
     if (
       !window.confirm(
-        `Approve & go live "${label}"?\n\nGoes live immediately if it has a title and at least one image (inventory 0 / sold out is OK).`
+        `Approve & go live "${label}"?\n\nGoes live immediately if it has a title, at least one image, and a selling price greater than ₹0 (inventory 0 / sold out is OK).`
       )
     ) {
       return

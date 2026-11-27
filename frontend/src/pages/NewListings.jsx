@@ -50,7 +50,7 @@ function getMissingFields(product) {
 
 function isReadyToConfirm(product) {
   const title = (product?.title || '').trim()
-  return Boolean(title) && countImages(product) > 0
+  return Boolean(title) && countImages(product) > 0 && Number(product?.price) > 0
 }
 
 const NewListings = () => {
@@ -218,7 +218,7 @@ const NewListings = () => {
     const label = product.sku || product.title || 'this listing'
     if (
       !window.confirm(
-        `Approve & go live "${label}"?\n\nGoes live immediately if it has a title and at least one image (inventory 0 / sold out is OK).`
+        `Approve & go live "${label}"?\n\nGoes live immediately if it has a title, at least one image, and a selling price greater than ₹0 (inventory 0 / sold out is OK).`
       )
     ) {
       return
@@ -747,8 +747,8 @@ const NewListings = () => {
       )}
 
       <p className="nl-footnote">
-        <strong>Ready to confirm</strong> = unpublished with a title and at least one
-        image (batch enrichment applied). Use <strong>Approve &amp; go live</strong>{' '}
+        <strong>Ready to confirm</strong> = unpublished with a title, at least one
+        image, and a selling price &gt; ₹0 (batch enrichment applied). Use <strong>Approve &amp; go live</strong>{' '}
         (owner/admin/staff) to publish — sold-out (inventory 0) is OK.{' '}
         <strong>Get details</strong> fills empty fields only and never publishes
         (scrape ≠ approve; staff data wins). Rows without enrichment stay blank until

@@ -7,6 +7,8 @@ const {
   hasMinimalStorefrontData,
   hasProductImage,
   hasNonEmptyTitle,
+  hasPositiveSellingPrice,
+  getPublishBlockReason,
 } = require("../utils/storeEligibility");
 const { migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
 const { isStaff, staffWriteError, canAccessBrand } = require("../utils/staffPermissions");
@@ -1713,7 +1715,7 @@ const pullProductEnrichment = async (req, res) => {
   }
 };
 
-// @desc    Approve & publish — set isPublished=true when title + ≥1 image
+// @desc    Approve & publish — set isPublished=true when title + ≥1 image + price > 0
 //          (inventory 0 OK). Immediate go-live; scrape/pull alone never does this.
 // @route   POST /api/products/:id/publish
 // @access  Private (IMS — non-admin staff scoped to allowed brands)
@@ -1749,14 +1751,15 @@ const publishProduct = async (req, res) => {
       });
     }
 
-    if (!hasMinimalStorefrontData(product)) {
+    const blockReason = getPublishBlockReason(product);
+    if (blockReason) {
       return res.status(400).json({
         success: false,
-        message:
-          "Cannot publish — product needs a non-empty title and at least one image (inventory may be 0)",
+        message: blockReason,
         data: {
           hasTitle: hasNonEmptyTitle(product),
           hasImage: hasProductImage(product),
+          hasPrice: hasPositiveSellingPrice(product),
         },
       });
     }

@@ -101,7 +101,7 @@ function applyPublishOnApprove(mergedDoc, patch = {}, { publish = false } = {}) 
     return {
       patch: next,
       published: false,
-      reason: "missing_title_or_image",
+      reason: "missing_title_image_or_price",
     };
   }
   next.isPublished = true;

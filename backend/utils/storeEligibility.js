@@ -47,6 +47,25 @@ function hasMinimalStorefrontData(doc) {
   );
 }
 
+/**
+ * Why a product cannot go live. Null when eligible.
+ * Prefer this for staff-facing 400s on Approve / isPublished=true.
+ */
+function getPublishBlockReason(doc) {
+  if (!doc) return "Product not found";
+  if ((doc.inventory ?? 0) < 0) return "Cannot publish — inventory cannot be negative";
+  if (!hasNonEmptyTitle(doc)) {
+    return "Cannot publish — set a non-empty title first";
+  }
+  if (!hasProductImage(doc)) {
+    return "Cannot publish — add at least one product image first";
+  }
+  if (!hasPositiveSellingPrice(doc)) {
+    return "Cannot publish — set a selling price greater than ₹0 first";
+  }
+  return null;
+}
+
 function isStorefrontEligible(doc) {
   if (!doc) return false;
   // If the core criteria are met, it should show up (instant reflect from IMS)
@@ -134,6 +153,7 @@ module.exports = {
   hasProductImage,
   hasPositiveSellingPrice,
   hasMinimalStorefrontData,
+  getPublishBlockReason,
   isStorefrontEligible,
   getStrictStorefrontFilter,
   storefrontImageMongoCondition,

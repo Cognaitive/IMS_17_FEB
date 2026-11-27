@@ -358,7 +358,16 @@ async function applyBrand(brandCfg) {
         const hasImg =
           (Array.isArray(imgs) && imgs.length > 0) ||
           Boolean(existing.imageUrl);
-        if (String(title).trim() && hasImg && existing.isPublished !== true) {
+        const price = Number(
+          merge.patch.price != null ? merge.patch.price : existing.price
+        );
+        const hasPrice = Number.isFinite(price) && price > 0;
+        if (
+          String(title).trim() &&
+          hasImg &&
+          hasPrice &&
+          existing.isPublished !== true
+        ) {
           merge.patch.isPublished = true;
           if (!merge.fill.includes("isPublished")) {
             merge.fill.push("isPublished");

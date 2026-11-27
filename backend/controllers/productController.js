@@ -8,6 +8,7 @@ const { compareProductChanges } = require("../utils/compareProductChanges");
 const {
   isStorefrontEligible,
   hasMinimalStorefrontData,
+  getPublishBlockReason,
   storefrontImageMongoCondition,
   storefrontTitleMongoCondition,
 } = require("../utils/storeEligibility");
@@ -133,6 +134,7 @@ const getProducts = async (req, res) => {
       const readyScope = {
         ...unpublishedScope,
         title: storefrontTitleMongoCondition(),
+        price: { $gt: 0 },
         ...storefrontImageMongoCondition(),
       };
       const [unpublishedTotal, missingImagesCount, readyToConfirmCount] =
@@ -175,13 +177,14 @@ const getProducts = async (req, res) => {
       };
     }
 
-    // Enriched unpublished: has title + ≥1 image (ready for Approve & go live)
+    // Enriched unpublished: title + ≥1 image + price > 0 (ready for Approve & go live)
     const wantReadyToConfirm =
       readyToConfirm === "1" ||
       readyToConfirm === "true" ||
       readyToConfirm === true;
     if (wantReadyToConfirm) {
       filter.title = storefrontTitleMongoCondition();
+      filter.price = { $gt: 0 };
       const imageOr = storefrontImageMongoCondition().$or;
       if (filter.$or) {
         // Keep search $or and require an image via $and
@@ -330,16 +333,17 @@ const createProduct = async (req, res) => {
     applyImageNormalization(productData);
 
     // New products stay unpublished until store admin Approves & publishes.
-    // Explicit isPublished in body is honored only for owner/admin.
+    // Explicit isPublished in body is honored only for owner/admin, and never
+    // when selling price ≤ 0 / title / image are missing.
     if (productData.isPublished === true && isStaff(req.user)) {
       productData.isPublished = false;
     } else if (productData.isPublished === undefined) {
       productData.isPublished = false;
-    } else if (
-      productData.isPublished === true &&
-      !hasMinimalStorefrontData(productData)
-    ) {
-      productData.isPublished = false;
+    } else if (productData.isPublished === true) {
+      const blockReason = getPublishBlockReason(productData);
+      if (blockReason) {
+        return res.status(400).json({ success: false, message: blockReason });
+      }
     }
 
     // If oldPrice not provided, set it to price
@@ -422,8 +426,14 @@ const updateProduct = async (req, res) => {
 
     const mergedForStore = { ...currentProduct.toObject(), ...updateData };
     // Never auto-promote to live — owner/admin must Approve & publish.
-    // Demote when product no longer meets title+image eligibility.
-    if (!hasMinimalStorefrontData(mergedForStore)) {
+    // Demote when product no longer meets title+image+price eligibility.
+    // Explicit isPublished:true with missing price/title/image → clear 400.
+    if (updateData.isPublished === true) {
+      const blockReason = getPublishBlockReason(mergedForStore);
+      if (blockReason) {
+        return res.status(400).json({ success: false, message: blockReason });
+      }
+    } else if (!hasMinimalStorefrontData(mergedForStore)) {
       updateData.isPublished = false;
     } else if (updateData.isPublished === undefined) {
       delete updateData.isPublished;
@@ -567,7 +577,12 @@ const patchProduct = async (req, res) => {
     // Create a temporary product object with updates to compare changes & publish status
     const updatedProductData = { ...currentProduct.toObject(), ...updateObj };
     // Never auto-promote to live — owner/admin must Approve & publish.
-    if (!hasMinimalStorefrontData(updatedProductData)) {
+    if (updateObj.isPublished === true) {
+      const blockReason = getPublishBlockReason(updatedProductData);
+      if (blockReason) {
+        return res.status(400).json({ success: false, message: blockReason });
+      }
+    } else if (!hasMinimalStorefrontData(updatedProductData)) {
       updateObj.isPublished = false;
     }
 

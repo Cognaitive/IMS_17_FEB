@@ -134,7 +134,7 @@ async function main() {
 
       if (!hasMinimalStorefrontData(doc)) {
         summary.ineligible.push(sku);
-        console.log(`  ${sku}: skip (need title + image)`);
+        console.log(`  ${sku}: skip (need title + image + price > 0)`);
         continue;
       }
 
