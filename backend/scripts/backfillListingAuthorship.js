@@ -155,10 +155,12 @@ async function main() {
 
     updated++;
     if (!dryRun) {
+      // timestamps:false — do not bump updatedAt while stamping authorship
       bulk.push({
         updateOne: {
           filter: { _id: product._id },
           update: { $set },
+          timestamps: false,
         },
       });
       if (bulk.length >= 500) {
