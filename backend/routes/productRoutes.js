@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getProducts,
   getProduct,
+  getListingAudit,
   createProduct,
   updateProduct,
   patchProduct,
@@ -36,6 +37,7 @@ const { protect, imsOnly } = require("../middleware/auth");
 router.use(protect, imsOnly);
 
 router.get("/brands/list", getBrands);
+router.get("/listing-audit", getListingAudit);
 router.patch("/bulk/update", bulkPatchProducts);
 router.post("/bulk/delete", bulkDeleteProducts);
 router.get("/", getProducts);

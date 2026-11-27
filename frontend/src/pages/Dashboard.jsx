@@ -669,6 +669,12 @@ const Dashboard = () => {
             >
               Activity History
             </button>
+            <button
+              onClick={() => navigate('/listing-audit')}
+              className="btn-activity-history"
+            >
+              Listing Audit
+            </button>
             {canAccessMyStore && (
               <button
                 onClick={() => navigate('/my-store/orders')}

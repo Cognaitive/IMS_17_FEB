@@ -7,6 +7,10 @@ const { migrateUrlsToDoSpaces } = require("../utils/doSpacesImageMigrator");
 const { hasMinimalStorefrontData } = require("../utils/storeEligibility");
 const { generateProductSlug } = require("../utils/slugify");
 const { staffWriteError } = require("../utils/staffPermissions");
+const {
+  createdAuthorshipFields,
+  updatedAuthorshipFields,
+} = require("../utils/listingAuthorship");
 const { clearBrandsCache } = require("./productController");
 
 // Zero-dependency CSV parser that safely respects quotes, escaped quotes, embedded commas and newlines
@@ -429,10 +433,16 @@ const importCSV = async (req, res) => {
           unchangedCount++;
           continue;
         }
+        Object.assign(data, updatedAuthorshipFields(req.user));
         updateOps.push({ updateOne: { filter: { _id: existing._id }, update: { $set: data } } });
         updateMeta.push({ rowLabel, sku: existing.sku, existing, data, changes, images });
       } else {
-        const doc = { ...data, sku: group.sku, user: req.user.id };
+        const doc = {
+          ...data,
+          sku: group.sku,
+          user: req.user.id,
+          ...createdAuthorshipFields(req.user),
+        };
         if (doc.oldPrice === undefined) doc.oldPrice = doc.price || 0;
         if (doc.isPublished === undefined) doc.isPublished = hasMinimalStorefrontData(doc);
         const cat = brandCategory.get(doc.brand.toLowerCase());

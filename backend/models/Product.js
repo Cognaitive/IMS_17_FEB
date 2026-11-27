@@ -9,6 +9,24 @@ const productSchema = new mongoose.Schema(
       ref: "User",
     },
 
+    // Who entered the listing (staff/admin). Denormalized names for audit UI.
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+    },
+    createdByName: { type: String, trim: true, default: "" },
+    createdByEmail: { type: String, trim: true, default: "" },
+
+    // Who last updated the listing (staff/admin approve, edit, import, enrich).
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+    },
+    updatedByName: { type: String, trim: true, default: "" },
+    updatedByEmail: { type: String, trim: true, default: "" },
+
     brand: {
       type: String,
       trim: true,

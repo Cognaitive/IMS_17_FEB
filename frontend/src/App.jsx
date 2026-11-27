@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import ActivityHistory from './pages/ActivityHistory'
+import ListingAudit from './pages/ListingAudit'
 import NewListings from './pages/NewListings'
 import EnrichmentStatus from './pages/EnrichmentStatus'
 import Footer from './components/Footer'
@@ -47,6 +48,14 @@ function App() {
                 element={
                   <PrivateRoute>
                     <ActivityHistory />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/listing-audit"
+                element={
+                  <PrivateRoute>
+                    <ListingAudit />
                   </PrivateRoute>
                 }
               />

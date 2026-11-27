@@ -46,6 +46,12 @@ export const getBrands = async () => {
   return response.data
 }
 
+/** Listing authorship audit — who entered / who last updated. */
+export const getListingAudit = async (params = {}) => {
+  const response = await api.get('/products/listing-audit', { params })
+  return response.data
+}
+
 /** Pull Balmain enrichment into a product (staff-wins fill-empty). */
 export const pullBalmainEnrichment = async (id, options = {}) => {
   const response = await api.post(`/products/${id}/enrich/balmain`, options)

@@ -13,6 +13,7 @@ const {
 const { gatePublishPriceAnomaly } = require("../utils/publishPriceGate");
 const { migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
 const { isStaff, staffWriteError, canAccessBrand } = require("../utils/staffPermissions");
+const { updatedAuthorshipFields } = require("../utils/listingAuthorship");
 const { generateProductSlug } = require("../utils/slugify");
 const {
   mergeProductFields,
@@ -1440,12 +1441,14 @@ async function pullBrandEnrichment(req, res, {
       });
     }
 
-    const mergedPreview = { ...existing, ...merge.patch };
+    const authorship = updatedAuthorshipFields(req.user);
+    const patchWithAuthor = { ...merge.patch, ...authorship };
+    const mergedPreview = { ...existing, ...patchWithAuthor };
     const changes = compareProductChanges(product, mergedPreview);
 
     const updated = await Product.findByIdAndUpdate(
       id,
-      { $set: merge.patch },
+      { $set: patchWithAuthor },
       { new: true, runValidators: true }
     );
 
@@ -1773,6 +1776,7 @@ const publishProduct = async (req, res) => {
     const previous = product.toObject();
     // Approve = publish immediately (sold-out allowed).
     product.isPublished = true;
+    Object.assign(product, updatedAuthorshipFields(req.user));
     await product.save();
 
     const changes = compareProductChanges(previous, product.toObject());
@@ -1883,6 +1887,7 @@ const rejectProductEnrichment = async (req, res) => {
     product.set("slug", undefined);
     // Leave Ready-to-confirm / storefront until re-enrich + Approve
     product.isPublished = false;
+    Object.assign(product, updatedAuthorshipFields(req.user));
 
     await product.save();
 

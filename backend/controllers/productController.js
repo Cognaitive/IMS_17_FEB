@@ -15,6 +15,10 @@ const {
 const { gatePublishPriceAnomaly } = require("../utils/publishPriceGate");
 const { migrateUrlsToDoSpaces, migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
 const { isStaff, canAccessBrand, staffWriteError } = require("../utils/staffPermissions");
+const {
+  createdAuthorshipFields,
+  updatedAuthorshipFields,
+} = require("../utils/listingAuthorship");
 
 // Keep image sequence deterministic and sync first image as primary.
 const normalizeImageList = (images) => {
@@ -325,10 +329,12 @@ const createProduct = async (req, res) => {
       return res.status(403).json({ message: denied });
     }
 
-    // Default behavior: oldPrice = price when product is created
+    // Default behavior: oldPrice = price when product is created.
+    // Authorship is always taken from the authenticated actor (not the body).
     const productData = {
       ...req.body,
       user: req.user.id,
+      ...createdAuthorshipFields(req.user),
     };
     delete productData.confirmPriceAnomaly;
 
@@ -410,7 +416,12 @@ const updateProduct = async (req, res) => {
     }
 
     const previousPrice = currentProduct.price || 0;
-    const updateData = { ...req.body };
+    const updateData = { ...req.body, ...updatedAuthorshipFields(req.user) };
+    // Authorship is server-owned — never accept client overrides for who entered.
+    delete updateData.createdBy;
+    delete updateData.createdByName;
+    delete updateData.createdByEmail;
+    delete updateData.user;
 
     applyImageNormalization(updateData);
 
@@ -584,6 +595,7 @@ const patchProduct = async (req, res) => {
 
     // Remove samePriceChecked from updateObj (it's not a database field)
     delete updateObj.samePriceChecked;
+    Object.assign(updateObj, updatedAuthorshipFields(req.user));
 
     // Create a temporary product object with updates to compare changes & publish status
     const updatedProductData = { ...currentProduct.toObject(), ...updateObj };
@@ -729,6 +741,7 @@ const bulkPatchProducts = async (req, res) => {
       }
 
       // Demote when ineligible; never auto-promote (Approve & publish endpoint)
+      Object.assign(productUpdateObj, updatedAuthorshipFields(req.user));
       const updatedProductData = { ...currentProduct.toObject(), ...productUpdateObj };
       const eligible = hasMinimalStorefrontData(updatedProductData);
       if (!eligible) {
@@ -923,6 +936,143 @@ const getBrands = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Listing authorship audit — who entered / who last updated each product
+ * @route   GET /api/products/listing-audit
+ * @access  Private (IMS)
+ */
+const getListingAudit = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 50,
+      brand,
+      search,
+      staffId,
+      staffRole = "any", // entered | updated | any
+      sortBy = "updatedAt",
+      sortOrder = "desc",
+    } = req.query;
+
+    const filter = {};
+
+    if (isStaff(req.user)) {
+      const allowedBrands = req.user.allowedBrands || [];
+      if (allowedBrands.length > 0) {
+        if (brand) {
+          if (!allowedBrands.map((b) => b.toLowerCase()).includes(String(brand).toLowerCase())) {
+            filter.brand = "__NOT_AUTHORIZED_BRAND__";
+          } else {
+            filter.brand = new RegExp(`^${brand}$`, "i");
+          }
+        } else {
+          filter.brand = { $in: allowedBrands.map((b) => new RegExp(`^${b}$`, "i")) };
+        }
+      } else {
+        filter.brand = "__NO_ASSIGNED_BRANDS__";
+      }
+    } else if (brand) {
+      filter.brand = new RegExp(`^${brand}$`, "i");
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(String(search).trim(), "i");
+      filter.$or = [
+        { brand: searchRegex },
+        { sku: searchRegex },
+        { title: searchRegex },
+        { createdByName: searchRegex },
+        { updatedByName: searchRegex },
+        { createdByEmail: searchRegex },
+        { updatedByEmail: searchRegex },
+      ];
+    }
+
+    if (staffId && mongoose.Types.ObjectId.isValid(staffId)) {
+      const oid = new mongoose.Types.ObjectId(staffId);
+      if (staffRole === "entered") {
+        filter.createdBy = oid;
+      } else if (staffRole === "updated") {
+        filter.updatedBy = oid;
+      } else {
+        filter.$and = [...(filter.$and || []), { $or: [{ createdBy: oid }, { updatedBy: oid }] }];
+      }
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (pageNum - 1) * limitNum;
+
+    const allowedSort = new Set(["updatedAt", "createdAt", "brand", "sku", "createdByName", "updatedByName"]);
+    const sortField = allowedSort.has(sortBy) ? sortBy : "updatedAt";
+    const sortDir = String(sortOrder).toLowerCase() === "asc" ? 1 : -1;
+
+    const [total, rows] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .select(
+          "brand sku title createdAt updatedAt createdBy createdByName createdByEmail updatedBy updatedByName updatedByEmail isPublished images"
+        )
+        .sort({ [sortField]: sortDir })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+    ]);
+
+    // Distinct staff who appear on listings (for filter dropdown)
+    const [enteredStaff, updatedStaff] = await Promise.all([
+      Product.aggregate([
+        { $match: { createdBy: { $ne: null } } },
+        {
+          $group: {
+            _id: "$createdBy",
+            name: { $first: "$createdByName" },
+            email: { $first: "$createdByEmail" },
+          },
+        },
+        { $sort: { name: 1 } },
+      ]),
+      Product.aggregate([
+        { $match: { updatedBy: { $ne: null } } },
+        {
+          $group: {
+            _id: "$updatedBy",
+            name: { $first: "$updatedByName" },
+            email: { $first: "$updatedByEmail" },
+          },
+        },
+        { $sort: { name: 1 } },
+      ]),
+    ]);
+
+    const staffMap = new Map();
+    for (const s of [...enteredStaff, ...updatedStaff]) {
+      const key = String(s._id);
+      if (!staffMap.has(key)) {
+        staffMap.set(key, {
+          _id: s._id,
+          name: s.name || "Unknown",
+          email: s.email || "",
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: rows,
+      page: pageNum,
+      limit: limitNum,
+      total,
+      totalPages: Math.ceil(total / limitNum) || 0,
+      staff: Array.from(staffMap.values()).sort((a, b) =>
+        String(a.name).localeCompare(String(b.name))
+      ),
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Helper function to clear brands cache (call after product create/update/delete)
 const clearBrandsCache = () => {
   brandsCache = null;
@@ -992,6 +1142,7 @@ const updateDashboardStatsInBackground = async () => {
 module.exports = {
   getProducts,
   getProduct,
+  getListingAudit,
   createProduct,
   updateProduct,
   patchProduct,
