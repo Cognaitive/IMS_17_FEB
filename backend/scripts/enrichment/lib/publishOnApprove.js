@@ -16,8 +16,8 @@ const PUBLISH_ON_APPROVE_POLICY =
 
 /**
  * Lightweight mirror of backend/utils/storeEligibility hasMinimalStorefrontData
- * (title + image; inventory ≥ 0 including 0). Kept local so CLI scripts do not
- * require the backend package graph for unit checks.
+ * (title + image + price > 0; inventory ≥ 0 including 0). Kept local so CLI
+ * scripts do not require the backend package graph for unit checks.
  */
 function hasNonEmptyTitle(doc) {
   const t = doc?.title;
@@ -43,11 +43,17 @@ function hasUsableImage(doc) {
   return false;
 }
 
+function hasPositiveSellingPrice(doc) {
+  if (!doc) return false;
+  const n = Number(doc.price);
+  return Number.isFinite(n) && n > 0;
+}
+
 function isPublishEligible(doc) {
   if (!doc) return false;
   const inv = doc.inventory;
   if (inv != null && Number(inv) < 0) return false;
-  return hasNonEmptyTitle(doc) && hasUsableImage(doc);
+  return hasNonEmptyTitle(doc) && hasUsableImage(doc) && hasPositiveSellingPrice(doc);
 }
 
 /**

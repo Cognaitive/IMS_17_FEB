@@ -322,6 +322,14 @@ exports.createRazorpayOrder = async (req, res) => {
         return res.status(404).json({ success: false, message: `Product not found: ${item.productId}` });
       }
 
+      const unitPrice = Number(product.price);
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `${product.title || "Product"} is not available for purchase (invalid price)`,
+        });
+      }
+
       // Check Inventory
       if (product.inventory < item.quantity) {
         return res.status(400).json({ 
@@ -333,10 +341,10 @@ exports.createRazorpayOrder = async (req, res) => {
       orderItemsWithDetails.push({
         product,
         quantity: item.quantity,
-        price: product.price || 0
+        price: unitPrice
       });
 
-      totalAmount += (product.price || 0) * item.quantity;
+      totalAmount += unitPrice * item.quantity;
     }
 
     if (totalAmount <= 0) {
@@ -486,15 +494,16 @@ exports.createRazorpayOrder = async (req, res) => {
 
     const rzpOrder = await razorpay.orders.create(options);
 
-    // Build items for DB
+    // Build items for DB (prices already validated > 0 above)
     const orderItems = [];
     for (const item of items) {
        const product = await Product.findById(item.productId);
+       const unitPrice = Number(product.price);
        orderItems.push({
           product: product._id,
           name: product.title || product.name || 'Store Product',
           quantity: Number(item.quantity) || 1,
-          price: product.price || 0,
+          price: unitPrice,
           image: product.images?.[0] || product.image?.url || '',
        });
     }

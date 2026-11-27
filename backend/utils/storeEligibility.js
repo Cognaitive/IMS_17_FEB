@@ -1,6 +1,7 @@
 /**
  * Single place for "can this product appear on the public storefront?"
- * Rule: non-empty trimmed title AND at least one image (images[], imageUrl, or image.url).
+ * Rule: non-empty trimmed title, at least one image, AND selling price > 0.
+ * Never show ₹0 / missing-price watches publicly.
  */
 
 function hasNonEmptyTitle(doc) {
@@ -25,18 +26,30 @@ function hasProductImage(doc) {
   return false;
 }
 
+/** Selling price must be a finite number strictly greater than 0. */
+function hasPositiveSellingPrice(doc) {
+  if (!doc) return false;
+  const n = Number(doc.price);
+  return Number.isFinite(n) && n > 0;
+}
+
+function storefrontPriceMongoCondition() {
+  return { $gt: 0 };
+}
+
 function hasMinimalStorefrontData(doc) {
   if (!doc) return false;
   return (
     (doc.inventory ?? 0) >= 0 &&
     hasNonEmptyTitle(doc) &&
-    hasProductImage(doc)
+    hasProductImage(doc) &&
+    hasPositiveSellingPrice(doc)
   );
 }
 
 function isStorefrontEligible(doc) {
   if (!doc) return false;
-  // If the 3 core criteria are met, it should show up (instant reflect from IMS)
+  // If the core criteria are met, it should show up (instant reflect from IMS)
   return hasMinimalStorefrontData(doc);
 }
 
@@ -65,12 +78,14 @@ function storefrontImageMongoCondition() {
  *   1. inventory >= 0
  *   2. non-empty title
  *   3. at least 1 valid image
+ *   4. selling price > 0 (null/missing/0/negative excluded)
  */
 function getStrictStorefrontFilter(customFilters = {}) {
   return {
     ...customFilters,
     inventory: { $gte: 0 },
     title: storefrontTitleMongoCondition(),
+    price: storefrontPriceMongoCondition(),
     ...storefrontImageMongoCondition(),
   };
 }
@@ -117,11 +132,13 @@ function buildBrandMatchClause(brandParam) {
 module.exports = {
   hasNonEmptyTitle,
   hasProductImage,
+  hasPositiveSellingPrice,
   hasMinimalStorefrontData,
   isStorefrontEligible,
   getStrictStorefrontFilter,
   storefrontImageMongoCondition,
   storefrontTitleMongoCondition,
+  storefrontPriceMongoCondition,
   escapeRegex,
   brandCatalogAliases,
   buildBrandMatchClause,

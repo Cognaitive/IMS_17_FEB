@@ -60,12 +60,16 @@ async function fetchProductBySlug(slug) {
       if (!json?.success) continue
 
       if (json.data && !Array.isArray(json.data) && typeof json.data === 'object') {
+        // Never render a buyable ₹0 / missing-price listing
+        if (!(Number(json.data.price) > 0)) return null
         return json.data
       }
 
       if (Array.isArray(json.data) && json.data.length > 0) {
         const exact = json.data.find((p) => p?.slug === slug)
-        return exact || json.data[0]
+        const picked = exact || json.data[0]
+        if (!(Number(picked?.price) > 0)) return null
+        return picked
       }
     } catch {
       // Try next endpoint fallback

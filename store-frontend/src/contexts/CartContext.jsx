@@ -58,6 +58,14 @@ export function CartProvider({ children }) {
   const toggleCart = () => setIsCartOpen(prev => !prev)
 
   const addToCart = (product, qty = 1, size = 'Standard') => {
+    if (!(Number(product?.price) > 0)) {
+      toast.error('This product is not available for purchase', {
+        id: 'zero-price-block',
+        icon: '⚠️',
+        style: { borderRadius: '10px', background: '#333', color: '#fff' },
+      })
+      return
+    }
     const inventory = Number(product.inventory) || 0
     
     setCartItems(prev => {
