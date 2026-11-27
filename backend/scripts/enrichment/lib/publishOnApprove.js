@@ -49,11 +49,42 @@ function hasPositiveSellingPrice(doc) {
   return Number.isFinite(n) && n > 0;
 }
 
+/**
+ * Extreme outlier vs oldPrice / priceSource (CLI has no soft-confirm UI).
+ * Soft / borderline anomalies are allowed through; hard outliers block publish.
+ */
+function hasExtremePriceAnomaly(doc) {
+  if (!doc) return false;
+  const price = Number(doc.price);
+  if (!Number.isFinite(price) || price <= 0) return false;
+  const refs = [];
+  const oldPrice = Number(doc.oldPrice);
+  if (Number.isFinite(oldPrice) && oldPrice > 0) refs.push(oldPrice);
+  const ps = doc.priceSource;
+  if (ps && typeof ps === "object") {
+    for (const raw of [ps.amount, ps.mrp]) {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n > 0) refs.push(n);
+    }
+  }
+  if (refs.length === 0) return false;
+  const minR = Math.min(...refs);
+  const maxR = Math.max(...refs);
+  if (minR > 0 && price / minR < 0.2) return true;
+  if (maxR > 0 && price / maxR > 3) return true;
+  return false;
+}
+
 function isPublishEligible(doc) {
   if (!doc) return false;
   const inv = doc.inventory;
   if (inv != null && Number(inv) < 0) return false;
-  return hasNonEmptyTitle(doc) && hasUsableImage(doc) && hasPositiveSellingPrice(doc);
+  return (
+    hasNonEmptyTitle(doc) &&
+    hasUsableImage(doc) &&
+    hasPositiveSellingPrice(doc) &&
+    !hasExtremePriceAnomaly(doc)
+  );
 }
 
 /**
@@ -98,10 +129,13 @@ function applyPublishOnApprove(mergedDoc, patch = {}, { publish = false } = {}) 
   }
   if (!isPublishEligible(mergedDoc)) {
     delete next.isPublished;
+    const reason = hasExtremePriceAnomaly(mergedDoc)
+      ? "extreme_price_anomaly"
+      : "missing_title_image_or_price";
     return {
       patch: next,
       published: false,
-      reason: "missing_title_image_or_price",
+      reason,
     };
   }
   next.isPublished = true;
@@ -116,6 +150,7 @@ module.exports = {
   PUBLISH_ON_APPROVE_POLICY,
   hasNonEmptyTitle,
   hasUsableImage,
+  hasExtremePriceAnomaly,
   isPublishEligible,
   resolvePublishFlag,
   applyPublishOnApprove,

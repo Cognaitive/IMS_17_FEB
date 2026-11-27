@@ -9,6 +9,10 @@ import { useProducts, useBrands, productKeys } from '../hooks/useProducts'
 import { pullProductEnrichment, publishProduct } from '../services/productService'
 import { getDisplayBrand } from '../utils/brandUtils'
 import {
+  approvePublishWithPriceGuard,
+  confirmApproveGoLive,
+} from '../utils/publishWithPriceGuard'
+import {
   isEnrichableProduct,
   formatEnrichmentToast,
 } from '../utils/enrichmentBrands'
@@ -215,18 +219,14 @@ const NewListings = () => {
 
   const handleApprovePublish = async (product) => {
     if (!product?._id) return
-    const label = product.sku || product.title || 'this listing'
-    if (
-      !window.confirm(
-        `Approve & go live "${label}"?\n\nGoes live immediately if it has a title, at least one image, and a selling price greater than ₹0 (inventory 0 / sold out is OK).`
-      )
-    ) {
-      return
-    }
+    if (!confirmApproveGoLive(product)) return
     setBusyId(`pub-${product._id}`)
     try {
-      const res = await publishProduct(product._id)
-      toast.success(res?.message || 'Listing published')
+      const result = await approvePublishWithPriceGuard(product, publishProduct, {
+        skipInitialConfirm: true,
+      })
+      if (result.cancelled || !result.published) return
+      toast.success(result.response?.message || 'Listing published')
       invalidateListings()
       if (showModal && selectedProduct?._id === product._id) {
         handleModalClose()

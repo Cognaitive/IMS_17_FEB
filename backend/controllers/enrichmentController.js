@@ -10,6 +10,7 @@ const {
   hasPositiveSellingPrice,
   getPublishBlockReason,
 } = require("../utils/storeEligibility");
+const { gatePublishPriceAnomaly } = require("../utils/publishPriceGate");
 const { migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
 const { isStaff, staffWriteError, canAccessBrand } = require("../utils/staffPermissions");
 const { generateProductSlug } = require("../utils/slugify");
@@ -1764,6 +1765,11 @@ const publishProduct = async (req, res) => {
       });
     }
 
+    const priceGate = gatePublishPriceAnomaly(product, req.body || {});
+    if (!priceGate.ok) {
+      return res.status(priceGate.httpStatus).json(priceGate.payload);
+    }
+
     const previous = product.toObject();
     // Approve = publish immediately (sold-out allowed).
     product.isPublished = true;
@@ -1784,6 +1790,18 @@ const publishProduct = async (req, res) => {
         action: "approve-publish",
         policy:
           "Approved enrichment ⇒ isPublished true immediately (sold-out allowed).",
+        ...(priceGate.anomaly
+          ? {
+              priceAnomalyConfirmed: true,
+              priceAnomaly: {
+                kind: priceGate.anomaly.kind,
+                level: priceGate.anomaly.level,
+                sellingPrice: priceGate.anomaly.sellingPrice,
+                competitorMin: priceGate.anomaly.competitorMin,
+                competitorMax: priceGate.anomaly.competitorMax,
+              },
+            }
+          : {}),
       },
     });
 

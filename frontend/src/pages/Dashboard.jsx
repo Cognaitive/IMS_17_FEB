@@ -26,6 +26,10 @@ import {
   publishProduct,
   rejectProductEnrichment,
 } from '../services/productService'
+import {
+  approvePublishWithPriceGuard,
+  confirmApproveGoLive,
+} from '../utils/publishWithPriceGuard'
 import { exportToCSV } from '../services/exportService'
 import InventoryTable from '../components/InventoryTable'
 import StatsCards from '../components/StatsCards'
@@ -226,21 +230,21 @@ const Dashboard = () => {
 
   const handleApprovePublish = async (product) => {
     if (!product?._id || !canPublish) return
-    const label = product.sku || product.title || 'this listing'
-    if (
-      !window.confirm(
-        `Approve & go live "${label}"?\n\nGoes live immediately if it has a title, at least one image, and a selling price greater than ₹0 (inventory 0 / sold out is OK).`
-      )
-    ) {
-      return
-    }
+    if (!confirmApproveGoLive(product)) return
     setEnrichmentBusy(`pub-${product._id}`)
     try {
-      const res = await publishProduct(product._id)
-      toast.success(res?.message || 'Listing published')
+      const result = await approvePublishWithPriceGuard(product, publishProduct, {
+        skipInitialConfirm: true,
+      })
+      if (result.cancelled || !result.published) return
+      toast.success(result.response?.message || 'Listing published')
       queryClient.invalidateQueries({ queryKey: productKeys.lists() })
-      if (showModal && selectedProduct?._id === product._id && res?.data?.product) {
-        setSelectedProduct(res.data.product)
+      if (
+        showModal &&
+        selectedProduct?._id === product._id &&
+        result.response?.data?.product
+      ) {
+        setSelectedProduct(result.response.data.product)
       }
     } catch (err) {
       toast.error(

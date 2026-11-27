@@ -12,6 +12,7 @@ const {
   storefrontImageMongoCondition,
   storefrontTitleMongoCondition,
 } = require("../utils/storeEligibility");
+const { gatePublishPriceAnomaly } = require("../utils/publishPriceGate");
 const { migrateUrlsToDoSpaces, migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
 const { isStaff, canAccessBrand, staffWriteError } = require("../utils/staffPermissions");
 
@@ -329,6 +330,7 @@ const createProduct = async (req, res) => {
       ...req.body,
       user: req.user.id,
     };
+    delete productData.confirmPriceAnomaly;
 
     applyImageNormalization(productData);
 
@@ -343,6 +345,10 @@ const createProduct = async (req, res) => {
       const blockReason = getPublishBlockReason(productData);
       if (blockReason) {
         return res.status(400).json({ success: false, message: blockReason });
+      }
+      const priceGate = gatePublishPriceAnomaly(productData, req.body || {});
+      if (!priceGate.ok) {
+        return res.status(priceGate.httpStatus).json(priceGate.payload);
       }
     }
 
@@ -423,6 +429,7 @@ const updateProduct = async (req, res) => {
 
     // Remove samePriceChecked from updateData (it's not a database field)
     delete updateData.samePriceChecked;
+    delete updateData.confirmPriceAnomaly;
 
     const mergedForStore = { ...currentProduct.toObject(), ...updateData };
     // Never auto-promote to live — owner/admin must Approve & publish.
@@ -432,6 +439,10 @@ const updateProduct = async (req, res) => {
       const blockReason = getPublishBlockReason(mergedForStore);
       if (blockReason) {
         return res.status(400).json({ success: false, message: blockReason });
+      }
+      const priceGate = gatePublishPriceAnomaly(mergedForStore, req.body || {});
+      if (!priceGate.ok) {
+        return res.status(priceGate.httpStatus).json(priceGate.payload);
       }
     } else if (!hasMinimalStorefrontData(mergedForStore)) {
       updateData.isPublished = false;
@@ -581,6 +592,13 @@ const patchProduct = async (req, res) => {
       const blockReason = getPublishBlockReason(updatedProductData);
       if (blockReason) {
         return res.status(400).json({ success: false, message: blockReason });
+      }
+      const priceGate = gatePublishPriceAnomaly(updatedProductData, {
+        confirmPriceAnomaly:
+          updates.confirmPriceAnomaly ?? req.body?.confirmPriceAnomaly,
+      });
+      if (!priceGate.ok) {
+        return res.status(priceGate.httpStatus).json(priceGate.payload);
       }
     } else if (!hasMinimalStorefrontData(updatedProductData)) {
       updateObj.isPublished = false;

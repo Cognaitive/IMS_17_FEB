@@ -74,8 +74,10 @@ export const pullProductEnrichment = async (id, options = {}) => {
 }
 
 /** Approve & go live — sets isPublished=true immediately (IMS staff+; sold-out OK). */
-export const publishProduct = async (id) => {
-  const response = await api.post(`/products/${id}/publish`)
+export const publishProduct = async (id, options = {}) => {
+  const body = {}
+  if (options.confirmPriceAnomaly) body.confirmPriceAnomaly = true
+  const response = await api.post(`/products/${id}/publish`, body)
   return response.data
 }
 
