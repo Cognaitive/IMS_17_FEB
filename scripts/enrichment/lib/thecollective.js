@@ -170,6 +170,7 @@ function imageUrlFromMedia(img) {
 }
 
 function extractImages(data) {
+  const { isRetailerBrandingUrl } = require("./retailerImageHygiene");
   const images = [];
   const seen = new Set();
   const list = data?.Media?.Images;
@@ -181,6 +182,7 @@ function extractImages(data) {
     if (!img || img["360Image"]) continue;
     const url = imageUrlFromMedia(img);
     if (!url || seen.has(url)) continue;
+    if (isRetailerBrandingUrl(url)) continue;
     seen.add(url);
     images.push(url);
   }

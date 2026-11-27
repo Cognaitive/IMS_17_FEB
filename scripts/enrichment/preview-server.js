@@ -38,6 +38,9 @@ const earnshaw = require("./brands/earnshaw");
 const alexandreChristie = require("./brands/alexandre-christie");
 const michaelKors = require("./brands/michael-kors");
 const phillipPlein = require("./brands/phillip-plein");
+const victorinox = require("./brands/victorinox");
+const alba = require("./brands/alba");
+const dkny = require("./brands/dkny");
 const { fetchBuffer, sleep, imageExtFromBuffer } = require("./lib/http");
 const {
   MERGE_POLICY,
@@ -69,6 +72,9 @@ const ALEXANDRE_CHRISTIE_BATCH_DIR = path.join(
 );
 const MICHAEL_KORS_BATCH_DIR = path.join(OUTPUT_ROOT, "michael-kors-batch");
 const PHILLIP_PLEIN_BATCH_DIR = path.join(OUTPUT_ROOT, "phillip-plein-batch");
+const VICTORINOX_BATCH_DIR = path.join(OUTPUT_ROOT, "victorinox-batch");
+const ALBA_BATCH_DIR = path.join(OUTPUT_ROOT, "alba-batch");
+const DKNY_BATCH_DIR = path.join(OUTPUT_ROOT, "dkny-batch");
 /** @deprecated Prefer BALMAIN_BATCH_DIR / TITAN_BATCH_DIR — kept for health payload */
 const BATCH_DIR = TITAN_BATCH_DIR;
 const APPROVED_PATH = path.join(OUTPUT_ROOT, "review-approved.json");
@@ -207,6 +213,33 @@ const PROGRESS_BRANDS = [
       path.join(OUTPUT_ROOT, "phillip-plein-proof"),
     ],
   },
+  {
+    id: "victorinox",
+    label: "Victorinox",
+    csv: path.join(INPUT_ROOT, "victorinox-need-details.csv"),
+    batchDirs: [
+      VICTORINOX_BATCH_DIR,
+      path.join(OUTPUT_ROOT, "victorinox-need-recover"),
+    ],
+  },
+  {
+    id: "alba",
+    label: "Alba",
+    csv: path.join(INPUT_ROOT, "alba-need-details.csv"),
+    batchDirs: [
+      ALBA_BATCH_DIR,
+      path.join(OUTPUT_ROOT, "alba-need-recover"),
+    ],
+  },
+  {
+    id: "dkny",
+    label: "DKNY",
+    csv: path.join(INPUT_ROOT, "dkny-skus.csv"),
+    batchDirs: [
+      DKNY_BATCH_DIR,
+      path.join(OUTPUT_ROOT, "dkny-need-recover"),
+    ],
+  },
 ];
 
 /** Brands removed from the review sidebar after approved DB push. */
@@ -240,6 +273,9 @@ function productBrandKey(product) {
   if (/^thomas\s*earnshaw$/.test(brand)) return "earnshaw";
   if (/^michael\s*kors$/.test(brand)) return "michael-kors";
   if (/^philli?pp?\s*plein$/.test(brand)) return "phillip-plein";
+  if (/^victorinox$/.test(brand)) return "victorinox";
+  if (/^alba$/.test(brand)) return "alba";
+  if (/^dkny$/.test(brand)) return "dkny";
   if (brand) return brand;
   const src = String(product?.source || "").toLowerCase();
   if (src === "balmainwatches" || src === "tatacliq") {
@@ -438,6 +474,27 @@ const BRANDS = {
     normalizeSku: phillipPlein.normalizeSku,
     defaultSku: "PWPUA0925",
   },
+  victorinox: {
+    id: "victorinox",
+    label: "Victorinox",
+    enrichSku: victorinox.enrichSku,
+    normalizeSku: victorinox.normalizeSku,
+    defaultSku: "242095",
+  },
+  alba: {
+    id: "alba",
+    label: "Alba",
+    enrichSku: alba.enrichSku,
+    normalizeSku: alba.normalizeSku,
+    defaultSku: "AL4817X1",
+  },
+  dkny: {
+    id: "dkny",
+    label: "DKNY",
+    enrichSku: dkny.enrichSku,
+    normalizeSku: dkny.normalizeSku,
+    defaultSku: "DK1G135M0055",
+  },
 };
 
 const REF_URLS = {
@@ -481,6 +538,8 @@ const REF_URLS = {
     "https://www.michaelkors.com/mini-lexington-black-tone-watch/MK7688.html",
   PWPUA0925:
     "https://justintime.in/products/the-hexagon-phantom-men-quartz-silver-dial-analog-stainless-steel-watch-pwpua0925",
+  DK1G135M0055:
+    "https://justintime.in/products/dkny-everyday-men-quartz-black-dial-analog-stainless-steel-watch-dk1g135m0055",
 };
 
 const BRAND_LABEL = {
@@ -499,6 +558,9 @@ const BRAND_LABEL = {
   "alexandre-christie": "Alexandre Christie",
   "michael-kors": "Michael Kors",
   "phillip-plein": "Phillip Plein",
+  "victorinox": "Victorinox",
+  "alba": "Alba",
+  dkny: "DKNY",
 };
 
 /** India-only / missing official PDP — Tata Cliq Luxury fallback URLs (Balmain) */
@@ -528,6 +590,7 @@ function resolveBrand(raw) {
   ) {
     key = "phillip-plein";
   }
+  if (key === "dkny") key = "dkny";
   return BRANDS[key] || BRANDS.balmain;
 }
 
@@ -2006,6 +2069,22 @@ async function handleScrape(req, res) {
         body.officialUrl ||
         REF_URLS[compact] ||
         phillipPlein.REF_URLS[compact] ||
+        enrichOpts.officialUrl ||
+        null;
+    }
+    if (brand.id === "dkny") {
+      enrichOpts.refUrls = dkny.REF_URLS;
+      enrichOpts.justInTimeRefUrls = dkny.JIT_REF_URLS;
+      enrichOpts.jitUrl =
+        body.jitUrl ||
+        body.justInTimeUrl ||
+        dkny.JIT_REF_URLS[compact] ||
+        null;
+      enrichOpts.jitOnly = Boolean(body.jitOnly || body.justInTimeOnly);
+      enrichOpts.officialUrl =
+        body.officialUrl ||
+        REF_URLS[compact] ||
+        dkny.REF_URLS[compact] ||
         enrichOpts.officialUrl ||
         null;
     }

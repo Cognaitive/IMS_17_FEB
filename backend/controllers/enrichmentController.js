@@ -38,6 +38,7 @@ const michaelKors = require("../scripts/enrichment/brands/michael-kors");
 const phillipPlein = require("../scripts/enrichment/brands/phillip-plein");
 const victorinox = require("../scripts/enrichment/brands/victorinox");
 const alba = require("../scripts/enrichment/brands/alba");
+const dkny = require("../scripts/enrichment/brands/dkny");
 
 const ENRICHMENT_ROOT = path.join(__dirname, "../scripts/enrichment");
 const ENRICHMENT_OUTPUT = path.join(ENRICHMENT_ROOT, "output");
@@ -136,6 +137,10 @@ const ALBA_BATCH_PRODUCTS_PATH = path.join(
   ENRICHMENT_OUTPUT,
   "alba-batch/products.json"
 );
+const DKNY_BATCH_PRODUCTS_PATH = path.join(
+  ENRICHMENT_OUTPUT,
+  "dkny-batch/products.json"
+);
 
 let balmainBatchCache = { mtimeMs: 0, bySku: new Map() };
 let titanBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
@@ -154,6 +159,7 @@ let michaelKorsBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 let phillipPleinBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 let victorinoxBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 let albaBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
+let dknyBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 
 function balmainSkuKey(raw) {
   try {
@@ -334,6 +340,17 @@ function victorinoxSkuKey(raw) {
 function albaSkuKey(raw) {
   try {
     return alba.normalizeSku(raw).compact;
+  } catch {
+    return String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[.\-_\s]/g, "");
+  }
+}
+
+function dknySkuKey(raw) {
+  try {
+    return dkny.normalizeSku(raw).compact;
   } catch {
     return String(raw || "")
       .trim()
@@ -798,6 +815,10 @@ function isAlbaBrand(brand) {
   return /^alba$/i.test(String(brand || "").trim());
 }
 
+function isDknyBrand(brand) {
+  return /^dkny$/i.test(String(brand || "").trim());
+}
+
 function loadRadoBatchIndex() {
   return loadPrefixedBrandBatchIndex(
     "rado",
@@ -879,6 +900,15 @@ function loadAlbaBatchIndex() {
   );
 }
 
+function loadDknyBatchIndex() {
+  return loadPrefixedBrandBatchIndex(
+    "dkny",
+    DKNY_BATCH_PRODUCTS_PATH,
+    dknyBatchCache,
+    dknySkuKey
+  );
+}
+
 const ENRICHABLE_BRANDS = [
   "Balmain",
   "Titan",
@@ -897,6 +927,7 @@ const ENRICHABLE_BRANDS = [
   "Phillip Plein",
   "Victorinox",
   "Alba",
+  "DKNY",
 ];
 
 function detectEnrichmentBrand(brand) {
@@ -917,6 +948,7 @@ function detectEnrichmentBrand(brand) {
   if (isPhillipPleinBrand(brand)) return "phillip-plein";
   if (isVictorinoxBrand(brand)) return "victorinox";
   if (isAlbaBrand(brand)) return "alba";
+  if (isDknyBrand(brand)) return "dkny";
   return null;
 }
 
@@ -1268,6 +1300,17 @@ async function resolveAlbaEnrichmentRecord(sku, opts = {}) {
   });
 }
 
+async function resolveDknyEnrichmentRecord(sku, opts = {}) {
+  return resolveSimpleBrandRecord(sku, {
+    ...opts,
+    loadBatch: loadDknyBatchIndex,
+    skuMatchKeys: dkny.skuMatchKeys,
+    keyFn: dknySkuKey,
+    enrichSku: dkny.enrichSku,
+    missLabel: "dkny-batch / dkny-*",
+  });
+}
+
 async function pullBrandEnrichment(req, res, {
   brandLabel,
   enrichmentKey,
@@ -1615,6 +1658,14 @@ const pullAlbaEnrichment = async (req, res) =>
     resolveRecord: resolveAlbaEnrichmentRecord,
   });
 
+const pullDknyEnrichment = async (req, res) =>
+  pullBrandEnrichment(req, res, {
+    brandLabel: "DKNY",
+    enrichmentKey: "dkny",
+    isBrand: isDknyBrand,
+    resolveRecord: resolveDknyEnrichmentRecord,
+  });
+
 const ENRICH_HANDLERS = {
   balmain: pullBalmainEnrichment,
   titan: pullTitanEnrichment,
@@ -1633,6 +1684,7 @@ const ENRICH_HANDLERS = {
   "phillip-plein": pullPhillipPleinEnrichment,
   victorinox: pullVictorinoxEnrichment,
   alba: pullAlbaEnrichment,
+  dkny: pullDknyEnrichment,
 };
 
 // @desc    Pull brand enrichment — detects Balmain / Titan / Timex / Tissot / Fossil / Casio / Seiko / Longines / Rado / Emporio Armani / Armani Exchange / Earnshaw / Alexandre Christie / Michael Kors
@@ -1863,6 +1915,7 @@ module.exports = {
   pullPhillipPleinEnrichment,
   pullVictorinoxEnrichment,
   pullAlbaEnrichment,
+  pullDknyEnrichment,
   pullProductEnrichment,
   publishProduct,
   rejectProductEnrichment,
@@ -1884,6 +1937,7 @@ module.exports = {
   loadPhillipPleinBatchIndex,
   loadVictorinoxBatchIndex,
   loadAlbaBatchIndex,
+  loadDknyBatchIndex,
   detectEnrichmentBrand,
   ENRICHABLE_BRANDS,
 };

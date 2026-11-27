@@ -27,6 +27,7 @@ const {
   loadPhillipPleinBatchIndex,
   loadVictorinoxBatchIndex,
   loadAlbaBatchIndex,
+  loadDknyBatchIndex,
   ENRICHABLE_BRANDS,
 } = require("../controllers/enrichmentController");
 
@@ -47,6 +48,7 @@ const michaelKors = require("../scripts/enrichment/brands/michael-kors");
 const phillipPlein = require("../scripts/enrichment/brands/phillip-plein");
 const victorinox = require("../scripts/enrichment/brands/victorinox");
 const alba = require("../scripts/enrichment/brands/alba");
+const dkny = require("../scripts/enrichment/brands/dkny");
 
 const ENRICHMENT_OUTPUT = path.join(
   __dirname,
@@ -296,6 +298,12 @@ const BRAND_CONFIG = [
     label: "Alba",
     mod: alba,
     loadDone: loadAlbaBatchIndex,
+  },
+  {
+    key: "dkny",
+    label: "DKNY",
+    mod: dkny,
+    loadDone: loadDknyBatchIndex,
   },
 ];
 

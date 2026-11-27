@@ -186,11 +186,13 @@ function upgradeEthosImage(url) {
 function extractEthosImages(html, ld) {
   const urls = [];
   const seen = new Set();
+  const { isRetailerBrandingUrl } = require("./retailerImageHygiene");
   const push = (u) => {
     let url = upgradeEthosImage(u);
     if (!url) return;
     if (!/ethoswatches\.com\/.*catalog\/product/i.test(url)) return;
     if (/close-cookies|ethos-logo|menu\/|calibre\//i.test(url)) return;
+    if (isRetailerBrandingUrl(url)) return;
     const key = url.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);

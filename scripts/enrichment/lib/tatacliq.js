@@ -145,9 +145,11 @@ function pickImageUrl(galleryImages) {
 function extractGalleryImages(data, html) {
   const urls = [];
   const seen = new Set();
+  const { isRetailerBrandingUrl } = require("./retailerImageHygiene");
   const push = (u) => {
     const url = absUrl(u).split("?")[0];
     if (!url || !/img\.tatacliq\.com/i.test(url)) return;
+    if (isRetailerBrandingUrl(url)) return;
     // Prefer largest size when duplicates differ only by WxH folder
     const fileKey = url.replace(/\/\d+Wx\d+H\//i, "/");
     if (seen.has(fileKey)) return;
@@ -212,6 +214,9 @@ function normalizeTataCliqUrl(urlOrId) {
   if (/^mp\d+$/i.test(raw)) {
     return `${TATA_ORIGIN}/p-${raw.toLowerCase()}`;
   }
+  if (/^p-mp\d+$/i.test(raw)) {
+    return `${TATA_ORIGIN}/${raw.toLowerCase()}`;
+  }
   if (/^https?:\/\//i.test(raw)) return raw.split("#")[0];
   if (raw.startsWith("/")) return absUrl(raw);
   if (/\/p-mp\d+/i.test(raw)) return absUrl(`/${raw.replace(/^\//, "")}`);
@@ -220,6 +225,10 @@ function normalizeTataCliqUrl(urlOrId) {
 
 function extractTataCliqPdpCandidates(html) {
   const candidates = [];
+  const push = (raw) => {
+    const url = normalizeTataCliqUrl(raw);
+    if (url && !candidates.includes(url)) candidates.push(url);
+  };
   const decoded = String(html || "")
     .replace(/&amp;/g, "&")
     .replace(/%2F/gi, "/")
@@ -231,21 +240,34 @@ function extractTataCliqPdpCandidates(html) {
     /https?:\/\/(?:www\.)?luxury\.tatacliq\.com\/[a-z0-9%-]+\/p-mp\d+/gi;
   let m;
   while ((m = re.exec(decoded))) {
-    const url = m[0].split("&")[0].replace(/[.,;)]+$/, "");
-    if (!candidates.includes(url)) candidates.push(url);
+    push(m[0].split("&")[0].replace(/[.,;)]+$/, ""));
   }
   const pathRe = /luxury\.tatacliq\.com(\/[a-z0-9-]+\/p-mp\d+)/gi;
   while ((m = pathRe.exec(decoded))) {
-    const url = absUrl(m[1]);
-    if (!candidates.includes(url)) candidates.push(url);
+    push(m[1]);
+  }
+  // Bare listing ids (Bing/Google often cite /p-mp… without the slug)
+  const bareRe = /(?:^|[^a-z0-9])(p-mp\d{6,})(?:[^a-z0-9]|$)/gi;
+  while ((m = bareRe.exec(decoded))) {
+    push(m[1]);
   }
   return candidates;
 }
 
+function brandSlugHint(brandHint) {
+  return String(brandHint || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 /**
  * Best-effort SKU → Tata Cliq Luxury PDP via public web search.
- * Tata Cliq on-site search often returns 0 hits for compact brand refs;
- * DuckDuckGo HTML frequently challenges Node (HTTP 202 / captcha).
+ * Tata Cliq on-site search often returns 0 hits for compact brand refs
+ * (and older PDPs stay live but drop out of search/index); DuckDuckGo HTML
+ * frequently challenges Node (HTTP 202 / captcha). Prefer REF_URLS / explicit
+ * tataCliqUrl when known.
  */
 async function resolveTataCliqUrlBySku(sku, options = {}) {
   const compact = String(sku || "")
@@ -256,8 +278,12 @@ async function resolveTataCliqUrlBySku(sku, options = {}) {
 
   const brandHint = options.brandHint || "Balmain";
   const dotted = options.dottedSku || "";
+  const slugBrand = brandSlugHint(brandHint);
+  const slugSku = `${slugBrand}-${compact.toLowerCase()}`.replace(/^-/, "");
   const queries = [
     `site:luxury.tatacliq.com ${compact} ${brandHint}`,
+    `site:luxury.tatacliq.com ${slugSku}`,
+    `site:luxury.tatacliq.com "${compact}"`,
     dotted
       ? `site:luxury.tatacliq.com "${dotted}" ${brandHint}`
       : null,
@@ -286,7 +312,10 @@ async function resolveTataCliqUrlBySku(sku, options = {}) {
       });
       // DuckDuckGo often returns 202 + captcha to Node — skip those bodies
       if (!res.ok || res.status === 202 || !res.text) continue;
-      if (/anomaly|captcha|challenge/i.test(res.text) && !/p-mp\d+/i.test(res.text)) {
+      if (
+        /anomaly-modal|captcha|unusual traffic/i.test(res.text) &&
+        !/p-mp\d+/i.test(res.text)
+      ) {
         continue;
       }
       for (const url of extractTataCliqPdpCandidates(res.text)) {

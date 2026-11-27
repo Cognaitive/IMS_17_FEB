@@ -9,6 +9,14 @@ const fs = require("fs");
 const path = require("path");
 const { fetchBuffer, sleep, imageExtFromBuffer } = require("./http");
 
+/** JIT / retailer Certificate-of-Authenticity slides (third-party logos). */
+const RETAILER_CERT_IMAGE_RE =
+  /certificate|authenticity|guaranteed[_-]?authentic|authorised[_-]?seller|authorized[_-]?seller/i;
+
+function isRetailerCertificateImageUrl(url) {
+  return RETAILER_CERT_IMAGE_RE.test(String(url || ""));
+}
+
 async function downloadProductImages(product, imagesDir, options = {}) {
   const {
     referer = "",
@@ -28,8 +36,16 @@ async function downloadProductImages(product, imagesDir, options = {}) {
   };
   if (referer) headers.Referer = referer;
 
-  for (let i = 0; i < (product.images || []).length; i++) {
-    const url = product.images[i];
+  const urls = (product.images || []).filter((url) => {
+    if (isRetailerCertificateImageUrl(url)) {
+      log(`  skip retailer certificate image: ${String(url).slice(0, 120)}`);
+      return false;
+    }
+    return true;
+  });
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
     try {
       const { buffer, contentType } = await fetchBuffer(url, { headers });
       const ext = imageExtFromBuffer(buffer, url, contentType);

@@ -17,6 +17,7 @@ export const ENRICHABLE_BRANDS = [
   'Phillip Plein',
   'Victorinox',
   'Alba',
+  'DKNY',
 ]
 
 export function getEnrichmentBrandKey(brand) {
@@ -57,6 +58,7 @@ export function getEnrichmentBrandKey(brand) {
   }
   if (b === 'victorinox') return 'victorinox'
   if (b === 'alba') return 'alba'
+  if (b === 'dkny') return 'dkny'
   return null
 }
 

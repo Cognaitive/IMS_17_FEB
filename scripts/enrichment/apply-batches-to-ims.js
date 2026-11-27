@@ -36,6 +36,7 @@ const {
   scrapedToIncoming,
 } = require("./lib/merge");
 const { normalizeGender } = require("./lib/gender");
+const { filterRetailerBrandingUrls } = require("./lib/retailerImageHygiene");
 
 let migrateUrlsToDoSpacesInBackground = null;
 try {
@@ -103,6 +104,7 @@ const BRAND_BATCHES = [
     dirs: [
       "armani-exchange-batch",
       "armani-exchange-recover-tatacliq-ethos",
+      "armani-exchange-helios-recover",
     ],
   },
   {
@@ -134,6 +136,21 @@ const BRAND_BATCHES = [
     id: "casio",
     brandRe: /^casio$/i,
     dirs: ["casio-proof", "casio-recover-ed676-a2474", "casio-need-recover"],
+  },
+  {
+    id: "victorinox",
+    brandRe: /^victorinox$/i,
+    dirs: ["victorinox-batch", "victorinox-need-recover"],
+  },
+  {
+    id: "alba",
+    brandRe: /^alba$/i,
+    dirs: ["alba-batch", "alba-need-recover"],
+  },
+  {
+    id: "dkny",
+    brandRe: /^dkny$/i,
+    dirs: ["dkny-batch", "dkny-need-recover"],
   },
 ];
 
@@ -347,6 +364,12 @@ async function applyBrand(brandCfg) {
             merge.fill.push("isPublished");
           }
         }
+      }
+
+      // Hard gate: never write retailer certificate / branding slides to IMS
+      if (Array.isArray(merge.patch.images)) {
+        merge.patch.images = filterRetailerBrandingUrls(merge.patch.images).kept;
+        if (!merge.patch.images.length) delete merge.patch.images;
       }
 
       if (Object.keys(merge.patch).length === 0) {

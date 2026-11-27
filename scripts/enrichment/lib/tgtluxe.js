@@ -118,18 +118,21 @@ function extractShopifyAttrs(bodyHtml) {
 }
 
 function extractImagesFromProductJson(product) {
+  const { isRetailerBrandingUrl } = require("./retailerImageHygiene");
   const images = Array.isArray(product?.images) ? product.images : [];
   const urls = [];
   const seen = new Set();
   for (const img of images) {
     const src = String(img?.src || "").split("?")[0];
     if (!src || !/cdn\.shopify\.com/i.test(src)) continue;
+    if (isRetailerBrandingUrl(src, img?.alt)) continue;
     if (seen.has(src)) continue;
     seen.add(src);
     urls.push(src);
   }
   if (!urls.length && product?.image?.src) {
-    urls.push(String(product.image.src).split("?")[0]);
+    const src = String(product.image.src).split("?")[0];
+    if (!isRetailerBrandingUrl(src, product.image.alt)) urls.push(src);
   }
   return urls;
 }

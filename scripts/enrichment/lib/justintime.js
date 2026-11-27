@@ -24,6 +24,10 @@ const {
   normalizeStrapColor,
   normalizeWaterResistance,
 } = require("./normalize");
+const {
+  isRetailerBrandingUrl,
+  isLastSlotLikelyCert,
+} = require("./retailerImageHygiene");
 
 const JIT_ORIGIN = "https://justintime.in";
 const SOURCE_ID = "justintime";
@@ -45,6 +49,15 @@ const REF_URLS = {
     "https://justintime.in/products/philipp-plein-men-quartz-blue-dial-analog-stainless-steel-watch-pwoaa0722",
   PWOAA0722:
     "https://justintime.in/products/philipp-plein-men-quartz-blue-dial-analog-stainless-steel-watch-pwoaa0722",
+  // Armani Exchange recoveries (official miss; Helios CDN CF-blocked for Node)
+  AX2194:
+    "https://justintime.in/products/armani-exchange-hampton-men-quartz-grey-dial-analog-stainless-steel-watch-ax2194",
+  AX2738:
+    "https://justintime.in/products/armani-exchange-cayde-men-quartz-black-dial-analog-stainless-steel-watch-ax2738",
+  AX5573:
+    "https://justintime.in/products/armani-exchange-lola-women-quartz-silver-dial-analog-stainless-steel-watch-ax5573",
+  AX5583:
+    "https://justintime.in/products/armani-exchange-women-quartz-silver-dial-analog-stainless-steel-watch-ax5583",
 };
 
 function compactSku(raw) {
@@ -242,18 +255,24 @@ async function fetchJustInTimeProductJson(pdpUrl, options = {}) {
 function extractImagesFromProductJson(product) {
   const urls = [];
   const seen = new Set();
-  const push = (raw) => {
+  const push = (raw, alt) => {
     if (!raw) return;
     let u = String(raw).split("?")[0].trim();
     u = absUrl(u);
     if (!/\.(jpe?g|png|webp)$/i.test(u)) return;
     if (/logo|icon|sprite|banner|favicon/i.test(u)) return;
+    // Hard gate: drop JIT Certificate of Authenticity / retailer-logo slides
+    if (isRetailerBrandingUrl(u, alt)) return;
     if (seen.has(u)) return;
     seen.add(u);
     urls.push(u);
   };
-  if (product.image?.src) push(product.image.src);
-  for (const img of product.images || []) push(img.src);
+  if (product.image?.src) push(product.image.src, product.image.alt);
+  for (const img of product.images || []) push(img.src, img.alt);
+  // Bias: last gallery image is often the retailer certificate slide
+  if (urls.length >= 2 && isLastSlotLikelyCert(urls[urls.length - 1])) {
+    urls.pop();
+  }
   return urls.slice(0, 12);
 }
 

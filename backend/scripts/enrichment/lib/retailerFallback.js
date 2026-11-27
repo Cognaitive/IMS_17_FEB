@@ -23,6 +23,12 @@ const {
   SOURCE_ID: JUSTINTIME,
   REF_URLS: JUSTINTIME_REF_URLS,
 } = require("./justintime");
+const {
+  enrichFromHelios,
+  SOURCE_ID: HELIOS,
+  REF_URLS: HELIOS_REF_URLS,
+} = require("./helios");
+const { auditProductImages } = require("./retailerImageHygiene");
 
 /** Known Tata Cliq Luxury PDPs for recent miss recoveries (compact SKU → URL). */
 const TATA_CLIQ_REF_URLS = {
@@ -30,6 +36,8 @@ const TATA_CLIQ_REF_URLS = {
     "https://luxury.tatacliq.com/rado-coupole-classic-men-41-mm/p-mp000000010718112",
   AR11123:
     "https://luxury.tatacliq.com/emporio-armani-ar11123-silver-aviator-watch-for-men/p-mp000000004650721",
+  AR11170:
+    "https://luxury.tatacliq.com/emporio-armani-ar11170-white-gianni-t-bar-watch-for-women/p-mp000000004650736",
   AR1704:
     "https://luxury.tatacliq.com/emporio-armani-ar1704-men-watches/p-mp000000003291693",
   AX2706:
@@ -77,21 +85,31 @@ const ETHOS_REF_URLS = {
 const PRESETS = {
   /**
    * Default luxury miss chain (official already missed):
-   * Collective → Tata Cliq → Just In Time → TGT Luxe → Ethos
+   * Collective → Tata Cliq → Helios → Just In Time → TGT Luxe → Ethos
    */
-  luxury: ["collective", "tatacliq", "justintime", "tgtluxe", "ethos"],
+  luxury: ["collective", "tatacliq", "helios", "justintime", "tgtluxe", "ethos"],
   /**
    * Casio India codes (ED### / A####): same as luxury; JIT after Tata Cliq.
    * Official casio.com is often CF/Akamai-blocked for Node.
    */
-  casio: ["collective", "tatacliq", "justintime", "tgtluxe", "ethos"],
+  casio: ["collective", "tatacliq", "helios", "justintime", "tgtluxe", "ethos"],
   /**
    * Philipp Plein / fashion refs where JIT carries stock: try JIT first.
    */
-  jit_first: ["justintime", "collective", "tatacliq", "tgtluxe", "ethos"],
-  /** Always keep Tata Cliq; JIT then Ethos. */
-  armani: ["tatacliq", "justintime", "ethos"],
-  tatacliq_ethos: ["tatacliq", "justintime", "ethos"],
+  jit_first: [
+    "justintime",
+    "helios",
+    "collective",
+    "tatacliq",
+    "tgtluxe",
+    "ethos",
+  ],
+  /**
+   * Armani / AX: Tata → Helios → Just In Time → Ethos.
+   * Helios gallery preferred when fixture/REF available (Node often CF-blocked).
+   */
+  armani: ["tatacliq", "helios", "justintime", "ethos"],
+  tatacliq_ethos: ["tatacliq", "helios", "justintime", "ethos"],
 };
 
 /** Official scrape outcomes that should trigger India retailer recovery. */
@@ -151,6 +169,15 @@ function resolveJustInTimeUrl(compact, options = {}) {
   );
 }
 
+function resolveHeliosUrl(compact, options = {}) {
+  return (
+    options.heliosUrl ||
+    (options.heliosRefUrls && options.heliosRefUrls[compact]) ||
+    HELIOS_REF_URLS[compact] ||
+    null
+  );
+}
+
 function buildSteps(sku, options = {}) {
   const compact = compactSku(sku);
   const brandHint = options.brandHint || "Watch";
@@ -183,12 +210,14 @@ function buildSteps(sku, options = {}) {
   if (options.skipTgtLuxe) order = order.filter((s) => s !== "tgtluxe");
   if (options.skipEthos) order = order.filter((s) => s !== "ethos");
   if (options.skipJustInTime) order = order.filter((s) => s !== "justintime");
+  if (options.skipHelios) order = order.filter((s) => s !== "helios");
 
   if (options.collectiveOnly) order = ["collective"];
   if (options.tataCliqOnly) order = ["tatacliq"];
   if (options.tgtLuxeOnly) order = ["tgtluxe"];
   if (options.ethosOnly) order = ["ethos"];
   if (options.justInTimeOnly || options.jitOnly) order = ["justintime"];
+  if (options.heliosOnly) order = ["helios"];
 
   const timeoutMs = options.timeoutMs;
   const steps = [];
@@ -217,6 +246,25 @@ function buildSteps(sku, options = {}) {
             timeoutMs,
             resolveBySku: options.resolveTataCliqBySku !== false,
             refUrls: { ...TATA_CLIQ_REF_URLS, ...(options.tataCliqRefUrls || {}) },
+          }),
+      });
+    } else if (id === "helios") {
+      steps.push({
+        id: HELIOS,
+        label: "Helios",
+        run: () =>
+          enrichFromHelios(compact, {
+            heliosUrl: resolveHeliosUrl(compact, options),
+            heliosHtmlPath: options.heliosHtmlPath || null,
+            fixtureDir: options.fixtureDir || null,
+            preferFixture: options.preferFixture || false,
+            brandHint,
+            timeoutMs,
+            resolveBySku: options.resolveHeliosBySku !== false,
+            heliosRefUrls: {
+              ...HELIOS_REF_URLS,
+              ...(options.heliosRefUrls || {}),
+            },
           }),
       });
     } else if (id === "justintime") {
@@ -296,6 +344,8 @@ async function enrichFromRetailerChain(sku, options = {}) {
         if (!result.warnings) result.warnings = [];
         const warnKey = `india_retailer_${step.id}_fallback`;
         if (!result.warnings.includes(warnKey)) result.warnings.push(warnKey);
+        // Hard gate: strip certificate / retailer-logo slides before forward
+        auditProductImages(result);
         return { product: result, attempts };
       }
     } catch (err) {
@@ -406,6 +456,7 @@ module.exports = {
   TGT_LUXE_REF_URLS,
   ETHOS_REF_URLS,
   JUSTINTIME_REF_URLS,
+  HELIOS_REF_URLS,
   OFFICIAL_FAIL_CODES,
   compactSku,
   buildSteps,
@@ -417,5 +468,6 @@ module.exports = {
   resolveTgtLuxeUrl,
   resolveEthosUrl,
   resolveJustInTimeUrl,
-  SOURCE: { TATA, COLLECTIVE, TGT, ETHOS, JUSTINTIME },
+  resolveHeliosUrl,
+  SOURCE: { TATA, COLLECTIVE, TGT, ETHOS, JUSTINTIME, HELIOS },
 };

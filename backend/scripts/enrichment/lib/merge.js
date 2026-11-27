@@ -21,6 +21,7 @@ const {
   applyGenderNormalization,
 } = require("./gender");
 const { normalizeProductFields } = require("./normalize");
+const { filterRetailerBrandingUrls } = require("./retailerImageHygiene");
 
 const SCALAR_FIELDS = [
   "title",
@@ -167,9 +168,12 @@ function decideField(field, existingVal, incomingVal, opts = {}) {
 
 function decideImages(existingProduct, incomingImages, opts = {}) {
   const force = Boolean(opts.forceOverwrite);
-  const incoming = Array.isArray(incomingImages)
-    ? incomingImages.filter((u) => u && String(u).trim())
-    : [];
+  // Hard gate: never merge retailer certificate / branding slides into IMS
+  const incoming = filterRetailerBrandingUrls(
+    Array.isArray(incomingImages)
+      ? incomingImages.filter((u) => u && String(u).trim())
+      : []
+  ).kept;
   // Prefer probed usable list when provided (broken URLs → treat as empty)
   const existing = Array.isArray(opts.existingUsableUrls)
     ? opts.existingUsableUrls.filter((u) => u && String(u).trim())
