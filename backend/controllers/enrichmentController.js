@@ -36,6 +36,8 @@ const earnshaw = require("../scripts/enrichment/brands/earnshaw");
 const alexandreChristie = require("../scripts/enrichment/brands/alexandre-christie");
 const michaelKors = require("../scripts/enrichment/brands/michael-kors");
 const phillipPlein = require("../scripts/enrichment/brands/phillip-plein");
+const victorinox = require("../scripts/enrichment/brands/victorinox");
+const alba = require("../scripts/enrichment/brands/alba");
 
 const ENRICHMENT_ROOT = path.join(__dirname, "../scripts/enrichment");
 const ENRICHMENT_OUTPUT = path.join(ENRICHMENT_ROOT, "output");
@@ -126,6 +128,14 @@ const PHILLIP_PLEIN_BATCH_PRODUCTS_PATH = path.join(
   ENRICHMENT_OUTPUT,
   "phillip-plein-batch/products.json"
 );
+const VICTORINOX_BATCH_PRODUCTS_PATH = path.join(
+  ENRICHMENT_OUTPUT,
+  "victorinox-batch/products.json"
+);
+const ALBA_BATCH_PRODUCTS_PATH = path.join(
+  ENRICHMENT_OUTPUT,
+  "alba-batch/products.json"
+);
 
 let balmainBatchCache = { mtimeMs: 0, bySku: new Map() };
 let titanBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
@@ -142,6 +152,8 @@ let earnshawBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 let alexandreChristieBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 let michaelKorsBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 let phillipPleinBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
+let victorinoxBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
+let albaBatchCache = { mtimeMs: 0, fingerprint: "", bySku: new Map() };
 
 function balmainSkuKey(raw) {
   try {
@@ -300,6 +312,28 @@ function michaelKorsSkuKey(raw) {
 function phillipPleinSkuKey(raw) {
   try {
     return phillipPlein.normalizeSku(raw).compact;
+  } catch {
+    return String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[.\-_\s]/g, "");
+  }
+}
+
+function victorinoxSkuKey(raw) {
+  try {
+    return victorinox.normalizeSku(raw).compact;
+  } catch {
+    return String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[.\-_\s]/g, "");
+  }
+}
+
+function albaSkuKey(raw) {
+  try {
+    return alba.normalizeSku(raw).compact;
   } catch {
     return String(raw || "")
       .trim()
@@ -756,6 +790,14 @@ function isPhillipPleinBrand(brand) {
   );
 }
 
+function isVictorinoxBrand(brand) {
+  return /^victorinox$/i.test(String(brand || "").trim());
+}
+
+function isAlbaBrand(brand) {
+  return /^alba$/i.test(String(brand || "").trim());
+}
+
 function loadRadoBatchIndex() {
   return loadPrefixedBrandBatchIndex(
     "rado",
@@ -819,6 +861,24 @@ function loadPhillipPleinBatchIndex() {
   );
 }
 
+function loadVictorinoxBatchIndex() {
+  return loadPrefixedBrandBatchIndex(
+    "victorinox",
+    VICTORINOX_BATCH_PRODUCTS_PATH,
+    victorinoxBatchCache,
+    victorinoxSkuKey
+  );
+}
+
+function loadAlbaBatchIndex() {
+  return loadPrefixedBrandBatchIndex(
+    "alba",
+    ALBA_BATCH_PRODUCTS_PATH,
+    albaBatchCache,
+    albaSkuKey
+  );
+}
+
 const ENRICHABLE_BRANDS = [
   "Balmain",
   "Titan",
@@ -835,6 +895,8 @@ const ENRICHABLE_BRANDS = [
   "Alexandre Christie",
   "Michael Kors",
   "Phillip Plein",
+  "Victorinox",
+  "Alba",
 ];
 
 function detectEnrichmentBrand(brand) {
@@ -853,6 +915,8 @@ function detectEnrichmentBrand(brand) {
   if (isAlexandreChristieBrand(brand)) return "alexandre-christie";
   if (isMichaelKorsBrand(brand)) return "michael-kors";
   if (isPhillipPleinBrand(brand)) return "phillip-plein";
+  if (isVictorinoxBrand(brand)) return "victorinox";
+  if (isAlbaBrand(brand)) return "alba";
   return null;
 }
 
@@ -1179,6 +1243,28 @@ async function resolvePhillipPleinEnrichmentRecord(sku, opts = {}) {
     keyFn: phillipPleinSkuKey,
     enrichSku: phillipPlein.enrichSku,
     missLabel: "phillip-plein-batch / phillip-plein-*",
+  });
+}
+
+async function resolveVictorinoxEnrichmentRecord(sku, opts = {}) {
+  return resolveSimpleBrandRecord(sku, {
+    ...opts,
+    loadBatch: loadVictorinoxBatchIndex,
+    skuMatchKeys: victorinox.skuMatchKeys,
+    keyFn: victorinoxSkuKey,
+    enrichSku: victorinox.enrichSku,
+    missLabel: "victorinox-batch / victorinox-*",
+  });
+}
+
+async function resolveAlbaEnrichmentRecord(sku, opts = {}) {
+  return resolveSimpleBrandRecord(sku, {
+    ...opts,
+    loadBatch: loadAlbaBatchIndex,
+    skuMatchKeys: alba.skuMatchKeys,
+    keyFn: albaSkuKey,
+    enrichSku: alba.enrichSku,
+    missLabel: "alba-batch / alba-*",
   });
 }
 
@@ -1513,6 +1599,22 @@ const pullPhillipPleinEnrichment = async (req, res) =>
     resolveRecord: resolvePhillipPleinEnrichmentRecord,
   });
 
+const pullVictorinoxEnrichment = async (req, res) =>
+  pullBrandEnrichment(req, res, {
+    brandLabel: "Victorinox",
+    enrichmentKey: "victorinox",
+    isBrand: isVictorinoxBrand,
+    resolveRecord: resolveVictorinoxEnrichmentRecord,
+  });
+
+const pullAlbaEnrichment = async (req, res) =>
+  pullBrandEnrichment(req, res, {
+    brandLabel: "Alba",
+    enrichmentKey: "alba",
+    isBrand: isAlbaBrand,
+    resolveRecord: resolveAlbaEnrichmentRecord,
+  });
+
 const ENRICH_HANDLERS = {
   balmain: pullBalmainEnrichment,
   titan: pullTitanEnrichment,
@@ -1529,6 +1631,8 @@ const ENRICH_HANDLERS = {
   "alexandre-christie": pullAlexandreChristieEnrichment,
   "michael-kors": pullMichaelKorsEnrichment,
   "phillip-plein": pullPhillipPleinEnrichment,
+  victorinox: pullVictorinoxEnrichment,
+  alba: pullAlbaEnrichment,
 };
 
 // @desc    Pull brand enrichment — detects Balmain / Titan / Timex / Tissot / Fossil / Casio / Seiko / Longines / Rado / Emporio Armani / Armani Exchange / Earnshaw / Alexandre Christie / Michael Kors
@@ -1757,6 +1861,8 @@ module.exports = {
   pullAlexandreChristieEnrichment,
   pullMichaelKorsEnrichment,
   pullPhillipPleinEnrichment,
+  pullVictorinoxEnrichment,
+  pullAlbaEnrichment,
   pullProductEnrichment,
   publishProduct,
   rejectProductEnrichment,
@@ -1776,6 +1882,8 @@ module.exports = {
   loadAlexandreChristieBatchIndex,
   loadMichaelKorsBatchIndex,
   loadPhillipPleinBatchIndex,
+  loadVictorinoxBatchIndex,
+  loadAlbaBatchIndex,
   detectEnrichmentBrand,
   ENRICHABLE_BRANDS,
 };
