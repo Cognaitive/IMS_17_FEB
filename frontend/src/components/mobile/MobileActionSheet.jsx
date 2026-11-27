@@ -7,7 +7,7 @@ const MobileActionSheet = ({
   canPublish = false,
   canEdit = true,
   onApprove,
-  onReject,
+  onReportMismatch,
   onGetDetails,
   onDelete,
 }) => {
@@ -47,14 +47,14 @@ const MobileActionSheet = ({
               <span className="action-label">Approve & go live</span>
             </button>
           )}
-          {canEdit && typeof onReject === 'function' && (
+          {canEdit && typeof onReportMismatch === 'function' && (
             <button
               type="button"
               className="mobile-action-item reject"
-              onClick={() => runThenClose(onReject)}
+              onClick={() => runThenClose(onReportMismatch)}
             >
               <span className="action-icon">✕</span>
-              <span className="action-label">Reject</span>
+              <span className="action-label">Report mismatch</span>
             </button>
           )}
           <button

@@ -1,0 +1,101 @@
+.mismatch-report-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.mismatch-report-modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 440px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.22);
+}
+
+.mismatch-report-header h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.25rem;
+  font-weight: 650;
+  color: #1e293b;
+}
+
+.mismatch-report-sub {
+  margin: 0 0 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.mismatch-report-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mismatch-report-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+  margin-top: 0.35rem;
+}
+
+.mismatch-report-input,
+.mismatch-report-textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.95rem;
+  color: #0f172a;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.mismatch-report-input:focus,
+.mismatch-report-textarea:focus {
+  outline: none;
+  border-color: #64748b;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.15);
+}
+
+.mismatch-report-textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.mismatch-report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 1.1rem;
+}
+
+.mismatch-report-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mismatch-report-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mismatch-report-btn.cancel {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.mismatch-report-btn.submit {
+  background: #0f172a;
+  color: #fff;
+}

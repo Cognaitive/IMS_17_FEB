@@ -42,6 +42,14 @@ const productSchema = new mongoose.Schema(
       sparse: true,
     },
 
+    // Scanned / catalog model number when available. Owner brand→model sales prefer this over sku.
+    modelNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+    },
+
     category: {
       type: String,
       trim: true,
