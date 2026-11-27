@@ -30,7 +30,7 @@ const InventoryTable = memo(({
   onDelete,
   onGetDetails,
   onApprove,
-  onReject,
+  onReportMismatch,
   enrichmentBusy = null,
   loading,
   selectedIds,
@@ -58,7 +58,7 @@ const InventoryTable = memo(({
     const onDelete = data.onDelete
     const onGetDetails = data.onGetDetails
     const onApprove = data.onApprove
-    const onReject = data.onReject
+    const onReportMismatch = data.onReportMismatch
     const enrichmentBusy = data.enrichmentBusy
     const page = data.page || 1
     const limit = data.limit || 50
@@ -73,7 +73,7 @@ const InventoryTable = memo(({
     const enrichable = isEnrichableProduct(product)
     const gettingDetails = enrichmentBusy === `scan-${product._id}`
     const publishing = enrichmentBusy === `pub-${product._id}`
-    const rejecting = enrichmentBusy === `rej-${product._id}`
+    const reportingMismatch = enrichmentBusy === `mismatch-${product._id}`
     const unpublished = product.isPublished !== true
     const ready = isReadyToPublish(product)
     const busy = !!enrichmentBusy
@@ -215,16 +215,20 @@ const InventoryTable = memo(({
                   )}
                 </button>
               )}
-              {typeof onReject === 'function' && (
+              {typeof onReportMismatch === 'function' && (
                 <button
                   type="button"
-                  onClick={() => onReject(product)}
+                  onClick={() => onReportMismatch(product)}
                   className="action-btn reject-btn"
                   disabled={busy}
-                  aria-label={rejecting ? 'Rejecting enrichment' : 'Reject enrichment'}
-                  title="Reject — clear photos & scraped details; keep brand/SKU/price"
+                  aria-label={
+                    reportingMismatch
+                      ? 'Reporting mismatch'
+                      : 'Report mismatch'
+                  }
+                  title="Report mismatch — paste competitor URL to fix images/title/price"
                 >
-                  {rejecting ? (
+                  {reportingMismatch ? (
                     <span className="enrich-btn-spinner" aria-hidden="true" />
                   ) : (
                     <svg
@@ -319,7 +323,7 @@ const InventoryTable = memo(({
             onDelete,
             onGetDetails,
             onApprove,
-            onReject,
+            onReportMismatch,
             enrichmentBusy,
             page,
             limit,

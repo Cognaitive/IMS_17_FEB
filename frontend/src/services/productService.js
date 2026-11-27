@@ -87,3 +87,15 @@ export const rejectProductEnrichment = async (id) => {
   const response = await api.post(`/products/${id}/reject`)
   return response.data
 }
+
+/**
+ * Staff mismatch copilot — pull competitor PDP (Tata/JIT/Helios/…) and
+ * propose/apply images (+ title/price if present). Pass confirm:true for
+ * published listings after staff confirms the proposal.
+ */
+export const reportProductMismatch = async (id, { url, note, confirm } = {}) => {
+  const body = { url, note }
+  if (confirm) body.confirm = true
+  const response = await api.post(`/products/${id}/mismatch-report`, body)
+  return response.data
+}

@@ -24,8 +24,9 @@ import { useDashboardStats } from '../hooks/useDashboard'
 import {
   pullProductEnrichment,
   publishProduct,
-  rejectProductEnrichment,
+  reportProductMismatch,
 } from '../services/productService'
+import MismatchReportModal from '../components/MismatchReportModal'
 import { exportToCSV } from '../services/exportService'
 import InventoryTable from '../components/InventoryTable'
 import StatsCards from '../components/StatsCards'
@@ -91,6 +92,8 @@ const Dashboard = () => {
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [enrichmentBusy, setEnrichmentBusy] = useState(null)
+  const [mismatchProduct, setMismatchProduct] = useState(null)
+  const [mismatchSubmitting, setMismatchSubmitting] = useState(false)
 
   // Debounce search input (500ms)
   const debouncedSearch = useDebounce(filters.search, 500)
@@ -251,29 +254,54 @@ const Dashboard = () => {
     }
   }
 
-  const handleRejectEnrichment = async (product) => {
+  const handleOpenMismatchReport = (product) => {
     if (!product?._id || !canEditProducts) return
-    const label = product.sku || product.title || 'this listing'
-    if (
-      !window.confirm(
-        `Reject enrichment for "${label}"?\n\nClears photos and scraped title/description/specs/SEO. Keeps brand, SKU, price, inventory, and category. Does not delete the product.`
-      )
-    ) {
-      return
-    }
-    setEnrichmentBusy(`rej-${product._id}`)
+    setMismatchProduct(product)
+  }
+
+  const formatMismatchProposal = (proposal) => {
+    if (!proposal) return ''
+    const bits = []
+    if (proposal.imageCount) bits.push(`${proposal.imageCount} image(s)`)
+    if (proposal.title) bits.push(`title: ${proposal.title}`)
+    if (proposal.price != null) bits.push(`price: ₹${proposal.price}`)
+    return bits.join(' · ') || (proposal.fill || []).join(', ')
+  }
+
+  const handleSubmitMismatchReport = async ({ url, note, product }) => {
+    if (!product?._id || !canEditProducts) return
+    setMismatchSubmitting(true)
+    setEnrichmentBusy(`mismatch-${product._id}`)
     try {
-      const res = await rejectProductEnrichment(product._id)
-      toast.success(res?.message || 'Enrichment rejected — photos cleared')
+      let res = await reportProductMismatch(product._id, { url, note })
+      if (res?.needsConfirm) {
+        const label = product.sku || product.title || 'this listing'
+        const summary = formatMismatchProposal(res?.data?.proposal)
+        const ok = window.confirm(
+          `Apply mismatch fix to live listing "${label}"?\n\n${summary || 'Update images/title/price from competitor PDP.'}\n\nThis overwrites current gallery/fields on the storefront.`
+        )
+        if (!ok) {
+          toast('Mismatch report cancelled — nothing written')
+          return
+        }
+        res = await reportProductMismatch(product._id, {
+          url,
+          note,
+          confirm: true,
+        })
+      }
+      toast.success(res?.message || 'Mismatch fix applied')
+      setMismatchProduct(null)
       queryClient.invalidateQueries({ queryKey: productKeys.lists() })
       if (showModal && selectedProduct?._id === product._id && res?.data?.product) {
         setSelectedProduct(res.data.product)
       }
     } catch (err) {
       toast.error(
-        err.response?.data?.message || err.message || 'Reject failed'
+        err.response?.data?.message || err.message || 'Mismatch report failed'
       )
     } finally {
+      setMismatchSubmitting(false)
       setEnrichmentBusy(null)
     }
   }
@@ -370,10 +398,10 @@ const Dashboard = () => {
     }
   }
 
-  const handleActionSheetReject = () => {
+  const handleActionSheetReportMismatch = () => {
     if (actionSheetProduct) {
       setShowActionSheet(false)
-      handleRejectEnrichment(actionSheetProduct)
+      handleOpenMismatchReport(actionSheetProduct)
     }
   }
 
@@ -571,13 +599,23 @@ const Dashboard = () => {
           canPublish={canPublish}
           canEdit={canEditProducts}
           onApprove={handleActionSheetApprove}
-          onReject={handleActionSheetReject}
+          onReportMismatch={
+            canEditProducts ? handleActionSheetReportMismatch : undefined
+          }
           onGetDetails={
             actionSheetProduct && isEnrichableProduct(actionSheetProduct)
               ? handleActionSheetGetDetails
               : undefined
           }
           onDelete={handleActionSheetDelete}
+        />
+
+        <MismatchReportModal
+          isOpen={!!mismatchProduct}
+          onClose={() => !mismatchSubmitting && setMismatchProduct(null)}
+          onSubmit={handleSubmitMismatchReport}
+          product={mismatchProduct}
+          submitting={mismatchSubmitting}
         />
 
         <DeleteConfirmModal
@@ -869,7 +907,9 @@ const Dashboard = () => {
               onDelete={handleDeleteClick}
               onGetDetails={canEditProducts ? handleGetDetails : undefined}
               onApprove={canPublish ? handleApprovePublish : undefined}
-              onReject={canEditProducts ? handleRejectEnrichment : undefined}
+              onReportMismatch={
+                canEditProducts ? handleOpenMismatchReport : undefined
+              }
               enrichmentBusy={enrichmentBusy}
               loading={productsLoading}
               selectedIds={selectedIds}
@@ -970,6 +1010,14 @@ const Dashboard = () => {
           enrichmentBusy={enrichmentBusy}
         />
       )}
+
+      <MismatchReportModal
+        isOpen={!!mismatchProduct}
+        onClose={() => !mismatchSubmitting && setMismatchProduct(null)}
+        onSubmit={handleSubmitMismatchReport}
+        product={mismatchProduct}
+        submitting={mismatchSubmitting}
+      />
 
       <DeleteConfirmModal
         isOpen={showDeleteConfirm}

@@ -10,6 +10,7 @@ const {
 } = require("../utils/storeEligibility");
 const { migrateUrlsToDoSpacesInBackground } = require("../utils/doSpacesImageMigrator");
 const { isStaff, staffWriteError, canAccessBrand } = require("../utils/staffPermissions");
+const { updatedAuthorshipFields } = require("../utils/listingAuthorship");
 const { generateProductSlug } = require("../utils/slugify");
 const {
   mergeProductFields,
@@ -21,6 +22,11 @@ const { normalizeGender } = require("../scripts/enrichment/lib/gender");
 const {
   filterUsableImageUrls,
 } = require("../scripts/enrichment/lib/imageProbe");
+const {
+  enrichFromCompetitorUrl,
+  detectRetailerFromUrl,
+  SUPPORTED: COMPETITOR_URL_SUPPORTED,
+} = require("../scripts/enrichment/lib/competitorUrlEnrich");
 const balmain = require("../scripts/enrichment/brands/balmain");
 const titan = require("../scripts/enrichment/brands/titan");
 const timex = require("../scripts/enrichment/brands/timex");
@@ -1822,6 +1828,223 @@ const ENRICHMENT_CLEAR_STRING_FIELDS = [
   "seoImage",
 ];
 
+/**
+ * Build a surgical mismatch patch: replace gallery when scrape has images;
+ * overwrite title/price/oldPrice when scrape has them. Specs left alone.
+ */
+function buildMismatchPatch(incoming) {
+  const patch = {};
+  const fill = [];
+  if (Array.isArray(incoming.images) && incoming.images.length > 0) {
+    const urls = incoming.images
+      .map((u) => (typeof u === "string" ? u.trim() : ""))
+      .filter(Boolean);
+    if (urls.length) {
+      patch.images = urls;
+      fill.push("images");
+    }
+  }
+  if (incoming.title && String(incoming.title).trim()) {
+    patch.title = String(incoming.title).trim();
+    fill.push("title");
+  }
+  if (incoming.price != null && Number(incoming.price) > 0) {
+    patch.price = Number(incoming.price);
+    fill.push("price");
+  }
+  if (incoming.oldPrice != null && Number(incoming.oldPrice) > 0) {
+    patch.oldPrice = Number(incoming.oldPrice);
+    fill.push("oldPrice");
+  }
+  return { patch, fill };
+}
+
+// @desc    Report mismatch — staff pastes competitor PDP URL + note; scrape and
+//          propose/apply gallery (+ title/price if present). Confirm required for
+//          published listings; auto-apply for unpublished.
+// @route   POST /api/products/:id/mismatch-report
+// @access  Private (IMS)
+const reportProductMismatch = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    if (isStaff(req.user)) {
+      if (req.user.canEditProducts === false) {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is view-only",
+        });
+      }
+      if (!canAccessBrand(req.user, product.brand)) {
+        return res.status(403).json({
+          success: false,
+          message: "You don't have access to this brand",
+        });
+      }
+    }
+
+    const url = String(req.body?.url || "").trim();
+    const note = String(req.body?.note || "").trim();
+    const confirm =
+      req.body?.confirm === true ||
+      req.body?.confirm === "true" ||
+      req.body?.confirm === "1";
+
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        message: "Competitor URL is required",
+      });
+    }
+    if (!product.sku || !String(product.sku).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Product has no SKU — cannot match competitor PDP",
+      });
+    }
+
+    const retailer = detectRetailerFromUrl(url);
+    if (!retailer) {
+      return res.status(400).json({
+        success: false,
+        message: `Unsupported retailer URL. Paste a PDP from ${COMPETITOR_URL_SUPPORTED}.`,
+      });
+    }
+
+    const scraped = await enrichFromCompetitorUrl(product.sku, url, {
+      brandHint: product.brand || "Watch",
+    });
+    if (!scraped || scraped.status !== "ok") {
+      return res.status(404).json({
+        success: false,
+        message:
+          scraped?.reason ||
+          scraped?.status ||
+          "Could not pull details from that competitor URL",
+        data: {
+          source: scraped?.source || retailer,
+          sourceUrl: scraped?.sourceUrl || url,
+          note: note || undefined,
+        },
+      });
+    }
+
+    const { incoming } = prepareIncoming(scraped);
+    const { usable: scrapedUsable } = await filterUsableImageUrls(
+      collectImageUrls(incoming)
+    );
+    if (scrapedUsable.length) {
+      incoming.images = scrapedUsable;
+    } else {
+      delete incoming.images;
+    }
+
+    const { patch, fill } = buildMismatchPatch(incoming);
+    if (fill.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Competitor page had no usable images, title, or price to apply",
+        data: {
+          source: scraped.source || retailer,
+          sourceUrl: scraped.sourceUrl || url,
+          note: note || undefined,
+        },
+      });
+    }
+
+    const proposal = {
+      fill,
+      source: scraped.source || retailer,
+      sourceUrl: scraped.sourceUrl || url,
+      title: patch.title || null,
+      price: patch.price != null ? patch.price : null,
+      oldPrice: patch.oldPrice != null ? patch.oldPrice : null,
+      imageCount: Array.isArray(patch.images) ? patch.images.length : 0,
+      previewImages: Array.isArray(patch.images) ? patch.images.slice(0, 3) : [],
+    };
+
+    const published = product.isPublished === true;
+    if (published && !confirm) {
+      return res.json({
+        success: true,
+        needsConfirm: true,
+        message:
+          "Published listing — confirm to apply competitor images/title/price",
+        data: {
+          proposal,
+          note: note || undefined,
+          productId: product._id,
+          sku: product.sku,
+          isPublished: true,
+        },
+      });
+    }
+
+    Object.assign(patch, updatedAuthorshipFields(req.user));
+
+    const previous = product.toObject();
+    const mergedPreview = { ...previous, ...patch };
+    const changes = compareProductChanges(previous, mergedPreview);
+
+    const updated = await Product.findByIdAndUpdate(
+      product._id,
+      { $set: patch },
+      { new: true, runValidators: true }
+    );
+
+    if (patch.images && patch.images.length > 0) {
+      migrateUrlsToDoSpacesInBackground(updated._id, patch.images);
+    }
+
+    logActivity({
+      actionType: "UPDATE",
+      brand: updated.brand || "",
+      sku: updated.sku || "",
+      productId: updated._id,
+      adminId: req.user.id,
+      adminName: req.user.name || "Unknown",
+      adminEmail: req.user.email || "",
+      changes,
+      metadata: {
+        action: "mismatch-report",
+        source: proposal.source,
+        sourceUrl: proposal.sourceUrl,
+        note: note || undefined,
+        fill,
+        confirm: published ? true : false,
+        autoApplied: !published,
+        policy:
+          "Mismatch report pulls competitor PDP; applies images (+ title/price if present); Spaces migrate in background; confirm required when published.",
+      },
+    });
+
+    res.json({
+      success: true,
+      needsConfirm: false,
+      message: published
+        ? `Applied mismatch fix (${fill.join(", ")}) — images migrating to Spaces`
+        : `Applied mismatch fix (${fill.join(", ")}) — images migrating to Spaces`,
+      data: {
+        product: updated,
+        proposal,
+        note: note || undefined,
+        fill,
+        fillCount: fill.length,
+      },
+    });
+  } catch (error) {
+    console.error("Mismatch report failed:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Mismatch report failed",
+    });
+  }
+};
+
 // @desc    Reject enrichment — clear photos + scraped details; keep staff listing
 //          (brand/sku/price/inventory/category). Does NOT delete the product.
 // @route   POST /api/products/:id/reject
@@ -1918,6 +2141,7 @@ module.exports = {
   pullDknyEnrichment,
   pullProductEnrichment,
   publishProduct,
+  reportProductMismatch,
   rejectProductEnrichment,
   loadBatchIndex,
   loadBalmainBatchIndex,
