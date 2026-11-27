@@ -1,7 +1,7 @@
 import { useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
-import { canEditProducts } from '../../utils/roles'
+import { canEditProducts, isStoreAdmin } from '../../utils/roles'
 import ViewAsPicker from '../ViewAsPicker'
 import './MobileHeader.css'
 
@@ -26,6 +26,7 @@ const MobileHeader = ({ user, onLogout, onCreateProduct, onExportCSV, onImportCS
     else if (action === 'newlistings') navigate('/new-listings')
     else if (action === 'enrichment') navigate('/enrichment-status')
     else if (action === 'activity') navigate('/activity-history')
+    else if (action === 'mismatch') navigate('/mismatch-queue')
     else if (action === 'mystore') navigate('/my-store/orders')
     else if (action === 'staffs') navigate('/my-store/staffs')
     else if (action === 'logout') onLogout()
@@ -90,6 +91,12 @@ const MobileHeader = ({ user, onLogout, onCreateProduct, onExportCSV, onImportCS
               <span className="menu-icon">📋</span>
               <span>Activity History</span>
             </button>
+            {!isViewAs && isStoreAdmin(realUser) && (
+              <button className="mobile-menu-item" onClick={() => handleMenuAction('mismatch')}>
+                <span className="menu-icon">⇄</span>
+                <span>Mismatch queue</span>
+              </button>
+            )}
             {canAccessMyStore && (
               <button className="mobile-menu-item" onClick={() => handleMenuAction('mystore')}>
                 <span className="menu-icon">🏪</span>

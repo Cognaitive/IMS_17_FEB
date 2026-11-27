@@ -377,3 +377,122 @@
     justify-content: center;
   }
 }
+
+/* Mismatch queue (reuses this page shell) */
+.mismatch-status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: #eee;
+  color: #444;
+}
+
+.mismatch-status-pending,
+.mismatch-status-proposed {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.mismatch-status-applied {
+  background: #d4edda;
+  color: #155724;
+}
+
+.mismatch-status-failed {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.mismatch-url {
+  color: #4a90e2;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.mismatch-url:hover {
+  text-decoration: underline;
+}
+
+.mismatch-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.mismatch-detail-panel {
+  background: white;
+  border-radius: 8px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.mismatch-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.mismatch-detail-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.mismatch-detail-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  color: #666;
+}
+
+.mismatch-detail-body {
+  padding: 1rem 1.25rem;
+}
+
+.mismatch-detail-body p {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  color: #333;
+  word-break: break-word;
+}
+
+.mismatch-preview-images {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.mismatch-preview-images img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+}
+
+.mismatch-error {
+  color: #721c24;
+}
+
+.mismatch-detail-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e0e0e0;
+}

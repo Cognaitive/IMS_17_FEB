@@ -10,6 +10,7 @@ import ActivityHistory from './pages/ActivityHistory'
 import ListingAudit from './pages/ListingAudit'
 import NewListings from './pages/NewListings'
 import EnrichmentStatus from './pages/EnrichmentStatus'
+import MismatchQueue from './pages/MismatchQueue'
 import Footer from './components/Footer'
 import MyStoreLayout from './components/my-store/MyStoreLayout'
 import StoreDashboard from './pages/my-store/StoreDashboard'
@@ -72,6 +73,14 @@ function App() {
                 element={
                   <PrivateRoute>
                     <EnrichmentStatus />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/mismatch-queue"
+                element={
+                  <PrivateRoute>
+                    <MismatchQueue />
                   </PrivateRoute>
                 }
               />

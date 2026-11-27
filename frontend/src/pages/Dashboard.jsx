@@ -7,7 +7,7 @@ import { useIsMobile } from '../hooks/useMediaQuery'
 import { AuthContext } from '../context/AuthContext'
 import ViewAsPicker from '../components/ViewAsPicker'
 import { getDisplayBrand } from '../utils/brandUtils'
-import { canEditProducts as canEditProductsFor } from '../utils/roles'
+import { canEditProducts as canEditProductsFor, isStoreAdmin } from '../utils/roles'
 import {
   isEnrichableProduct,
   formatEnrichmentToast,
@@ -285,13 +285,16 @@ const Dashboard = () => {
           `Apply mismatch fix to live listing "${label}"?\n\n${summary || 'Update images/title/price from competitor PDP.'}\n\nThis overwrites current gallery/fields on the storefront.`
         )
         if (!ok) {
-          toast('Mismatch report cancelled — nothing written')
+          toast(
+            'Proposal saved to Mismatch queue — confirm later from there if needed'
+          )
           return
         }
         res = await reportProductMismatch(product._id, {
           url,
           note,
           confirm: true,
+          reportId: res?.data?.reportId,
         })
       }
       toast.success(res?.message || 'Mismatch fix applied')
@@ -713,6 +716,14 @@ const Dashboard = () => {
             >
               Listing Audit
             </button>
+            {!isViewAs && isStoreAdmin(realUser) && (
+              <button
+                onClick={() => navigate('/mismatch-queue')}
+                className="btn-activity-history"
+              >
+                Mismatch queue
+              </button>
+            )}
             {canAccessMyStore && (
               <button
                 onClick={() => navigate('/my-store/orders')}

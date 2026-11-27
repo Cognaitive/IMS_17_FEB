@@ -101,9 +101,13 @@ export const rejectProductEnrichment = async (id) => {
  * propose/apply images (+ title/price if present). Pass confirm:true for
  * published listings after staff confirms the proposal.
  */
-export const reportProductMismatch = async (id, { url, note, confirm } = {}) => {
+export const reportProductMismatch = async (
+  id,
+  { url, note, confirm, reportId } = {}
+) => {
   const body = { url, note }
   if (confirm) body.confirm = true
+  if (reportId) body.reportId = reportId
   const response = await api.post(`/products/${id}/mismatch-report`, body)
   return response.data
 }

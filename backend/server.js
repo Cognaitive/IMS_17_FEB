@@ -96,6 +96,7 @@ app.use("/api/store-admin", require("./routes/storeAdminRoutes"));
 app.use("/api/blogs", require("./routes/blogRoutes"));
 app.use("/api/analytics", require("./routes/analyticsRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
+app.use("/api/mismatch-reports", require("./routes/mismatchReportRoutes"));
 
 // Dynamic XML Sitemap for Search Engine Crawlers
 const sitemapController = require("./controllers/sitemapController");

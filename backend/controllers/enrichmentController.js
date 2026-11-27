@@ -30,6 +30,7 @@ const {
   detectRetailerFromUrl,
   SUPPORTED: COMPETITOR_URL_SUPPORTED,
 } = require("../scripts/enrichment/lib/competitorUrlEnrich");
+const MismatchReport = require("../models/MismatchReport");
 const balmain = require("../scripts/enrichment/brands/balmain");
 const titan = require("../scripts/enrichment/brands/titan");
 const timex = require("../scripts/enrichment/brands/timex");
@@ -1883,14 +1884,80 @@ function buildMismatchPatch(incoming) {
   return { patch, fill };
 }
 
+function mismatchFieldSnapshot(doc) {
+  const images = Array.isArray(doc?.images) ? doc.images.filter(Boolean) : [];
+  return {
+    title: doc?.title || null,
+    price: doc?.price != null ? doc.price : null,
+    oldPrice: doc?.oldPrice != null ? doc.oldPrice : null,
+    imageCount: images.length,
+  };
+}
+
+function buildMismatchBeforeAfter(previous, updated, fill) {
+  return {
+    fill: Array.isArray(fill) ? fill : [],
+    before: mismatchFieldSnapshot(previous),
+    after: mismatchFieldSnapshot(updated),
+  };
+}
+
+async function persistMismatchReport(fields) {
+  try {
+    if (fields.reportId) {
+      const existing = await MismatchReport.findById(fields.reportId);
+      if (existing) {
+        const {
+          reporterId,
+          reporterName,
+          reporterEmail,
+          ...updatable
+        } = fields.payload || {};
+        Object.assign(existing, updatable);
+        // Keep original reporter; only fill if somehow missing.
+        if (!existing.reporterId && reporterId) existing.reporterId = reporterId;
+        if (!existing.reporterName && reporterName) {
+          existing.reporterName = reporterName;
+        }
+        if (!existing.reporterEmail && reporterEmail) {
+          existing.reporterEmail = reporterEmail;
+        }
+        await existing.save();
+        return existing;
+      }
+    }
+    return await MismatchReport.create(fields.payload);
+  } catch (err) {
+    console.error("Persist mismatch report failed:", err);
+    return null;
+  }
+}
+
+function mismatchReporterFields(user) {
+  return {
+    reporterId: user?.id || user?._id,
+    reporterName: user?.name || "Unknown",
+    reporterEmail: user?.email || "",
+  };
+}
+
 // @desc    Report mismatch — staff pastes competitor PDP URL + note; scrape and
 //          propose/apply gallery (+ title/price if present). Confirm required for
-//          published listings; auto-apply for unpublished.
+//          published listings; auto-apply for unpublished. Always writes a queue row.
 // @route   POST /api/products/:id/mismatch-report
 // @access  Private (IMS)
 const reportProductMismatch = async (req, res) => {
+  const url = String(req.body?.url || "").trim();
+  const note = String(req.body?.note || "").trim();
+  const confirm =
+    req.body?.confirm === true ||
+    req.body?.confirm === "true" ||
+    req.body?.confirm === "1";
+  const reportId = req.body?.reportId ? String(req.body.reportId) : null;
+  let product = null;
+
   try {
-    const product = await Product.findById(req.params.id);
+    product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
@@ -1910,13 +1977,6 @@ const reportProductMismatch = async (req, res) => {
       }
     }
 
-    const url = String(req.body?.url || "").trim();
-    const note = String(req.body?.note || "").trim();
-    const confirm =
-      req.body?.confirm === true ||
-      req.body?.confirm === "true" ||
-      req.body?.confirm === "1";
-
     if (!url) {
       return res.status(400).json({
         success: false,
@@ -1930,11 +1990,31 @@ const reportProductMismatch = async (req, res) => {
       });
     }
 
+    const baseReport = {
+      productId: product._id,
+      sku: product.sku || "",
+      brand: product.brand || "",
+      title: product.title || "",
+      competitorUrl: url,
+      note: note || "",
+      ...mismatchReporterFields(req.user),
+      isPublished: product.isPublished === true,
+    };
+
     const retailer = detectRetailerFromUrl(url);
     if (!retailer) {
+      const saved = await persistMismatchReport({
+        reportId,
+        payload: {
+          ...baseReport,
+          status: "failed",
+          errorMessage: `Unsupported retailer URL. Paste a PDP from ${COMPETITOR_URL_SUPPORTED}.`,
+        },
+      });
       return res.status(400).json({
         success: false,
         message: `Unsupported retailer URL. Paste a PDP from ${COMPETITOR_URL_SUPPORTED}.`,
+        data: { reportId: saved?._id },
       });
     }
 
@@ -1942,16 +2022,30 @@ const reportProductMismatch = async (req, res) => {
       brandHint: product.brand || "Watch",
     });
     if (!scraped || scraped.status !== "ok") {
+      const message =
+        scraped?.reason ||
+        scraped?.status ||
+        "Could not pull details from that competitor URL";
+      const saved = await persistMismatchReport({
+        reportId,
+        payload: {
+          ...baseReport,
+          status: "failed",
+          errorMessage: message,
+          proposal: {
+            source: scraped?.source || retailer,
+            sourceUrl: scraped?.sourceUrl || url,
+          },
+        },
+      });
       return res.status(404).json({
         success: false,
-        message:
-          scraped?.reason ||
-          scraped?.status ||
-          "Could not pull details from that competitor URL",
+        message,
         data: {
           source: scraped?.source || retailer,
           sourceUrl: scraped?.sourceUrl || url,
           note: note || undefined,
+          reportId: saved?._id,
         },
       });
     }
@@ -1968,14 +2062,28 @@ const reportProductMismatch = async (req, res) => {
 
     const { patch, fill } = buildMismatchPatch(incoming);
     if (fill.length === 0) {
+      const message =
+        "Competitor page had no usable images, title, or price to apply";
+      const saved = await persistMismatchReport({
+        reportId,
+        payload: {
+          ...baseReport,
+          status: "failed",
+          errorMessage: message,
+          proposal: {
+            source: scraped.source || retailer,
+            sourceUrl: scraped.sourceUrl || url,
+          },
+        },
+      });
       return res.status(400).json({
         success: false,
-        message:
-          "Competitor page had no usable images, title, or price to apply",
+        message,
         data: {
           source: scraped.source || retailer,
           sourceUrl: scraped.sourceUrl || url,
           note: note || undefined,
+          reportId: saved?._id,
         },
       });
     }
@@ -1993,6 +2101,16 @@ const reportProductMismatch = async (req, res) => {
 
     const published = product.isPublished === true;
     if (published && !confirm) {
+      // pending = published proposal awaiting confirm-apply (queue inbox)
+      const saved = await persistMismatchReport({
+        reportId,
+        payload: {
+          ...baseReport,
+          status: "pending",
+          proposal,
+          errorMessage: "",
+        },
+      });
       return res.json({
         success: true,
         needsConfirm: true,
@@ -2004,6 +2122,7 @@ const reportProductMismatch = async (req, res) => {
           productId: product._id,
           sku: product.sku,
           isPublished: true,
+          reportId: saved?._id,
         },
       });
     }
@@ -2013,6 +2132,7 @@ const reportProductMismatch = async (req, res) => {
     const previous = product.toObject();
     const mergedPreview = { ...previous, ...patch };
     const changes = compareProductChanges(previous, mergedPreview);
+    const beforeAfter = buildMismatchBeforeAfter(previous, mergedPreview, fill);
 
     const updated = await Product.findByIdAndUpdate(
       product._id,
@@ -2022,6 +2142,43 @@ const reportProductMismatch = async (req, res) => {
 
     if (patch.images && patch.images.length > 0) {
       migrateUrlsToDoSpacesInBackground(updated._id, patch.images);
+    }
+
+    const saved = await persistMismatchReport({
+      reportId,
+      payload: {
+        ...baseReport,
+        status: "applied",
+        proposal,
+        beforeAfter,
+        errorMessage: "",
+        appliedAt: new Date(),
+        appliedById: req.user.id || req.user._id,
+        appliedByName: req.user.name || "Unknown",
+      },
+    });
+
+    // If confirm applied a new row, close any open proposal for same product+url.
+    if (!reportId && published) {
+      await MismatchReport.updateMany(
+        {
+          productId: product._id,
+          competitorUrl: url,
+          status: { $in: ["pending", "proposed"] },
+          ...(saved?._id ? { _id: { $ne: saved._id } } : {}),
+        },
+        {
+          $set: {
+            status: "applied",
+            proposal,
+            beforeAfter,
+            appliedAt: new Date(),
+            appliedById: req.user.id || req.user._id,
+            appliedByName: req.user.name || "Unknown",
+            errorMessage: "",
+          },
+        }
+      );
     }
 
     logActivity({
@@ -2041,6 +2198,7 @@ const reportProductMismatch = async (req, res) => {
         fill,
         confirm: published ? true : false,
         autoApplied: !published,
+        reportId: saved?._id,
         policy:
           "Mismatch report pulls competitor PDP; applies images (+ title/price if present); Spaces migrate in background; confirm required when published.",
       },
@@ -2049,19 +2207,36 @@ const reportProductMismatch = async (req, res) => {
     res.json({
       success: true,
       needsConfirm: false,
-      message: published
-        ? `Applied mismatch fix (${fill.join(", ")}) — images migrating to Spaces`
-        : `Applied mismatch fix (${fill.join(", ")}) — images migrating to Spaces`,
+      message: `Applied mismatch fix (${fill.join(", ")}) — images migrating to Spaces`,
       data: {
         product: updated,
         proposal,
         note: note || undefined,
         fill,
         fillCount: fill.length,
+        beforeAfter,
+        reportId: saved?._id,
       },
     });
   } catch (error) {
     console.error("Mismatch report failed:", error);
+    if (product) {
+      await persistMismatchReport({
+        reportId,
+        payload: {
+          productId: product._id,
+          sku: product.sku || "",
+          brand: product.brand || "",
+          title: product.title || "",
+          competitorUrl: url || "",
+          note: note || "",
+          ...mismatchReporterFields(req.user),
+          isPublished: product.isPublished === true,
+          status: "failed",
+          errorMessage: error.message || "Mismatch report failed",
+        },
+      });
+    }
     res.status(500).json({
       success: false,
       message: error.message || "Mismatch report failed",
